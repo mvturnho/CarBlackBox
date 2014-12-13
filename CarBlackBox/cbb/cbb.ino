@@ -66,6 +66,7 @@ SdFile file;
 int rowindex;
 
 int rpm = 0;
+int obdspeed = 10;
 int load = 50; //percent
 int throttle = 50;
 int frp = 0;
@@ -136,7 +137,7 @@ void setup() {
 	tft.fillRoundRect(0, RPM_POS, 240, 50, 10, ILI9341_DBLUE);
 	tft.drawFastHLine(0, 25, 240, ILI9341_RED);
 	tft.drawFastHLine(0, 26, 240, ILI9341_RED);
-
+//	gpsdump(gps);
 }
 
 void loop(void) {
@@ -153,9 +154,10 @@ void loop(void) {
 
 	if (obd.read(PID_RPM, rpm)) {
 		obd.read(PID_ENGINE_LOAD, load);
+		obd.read(PID_SPEED, obdspeed);
 		obd.read(PID_THROTTLE, throttle);
-		obd.read(0X11, frp);
-		obd.read(PID_MAF_FLOW, maf);
+//		obd.read(PID_FUEL_PRESSURE, frp);
+//		obd.read(PID_MAF_FLOW, maf);
 	}
 
 	tft.setCursor(10, RPM_POS + ALIGN_X);
@@ -165,11 +167,11 @@ void loop(void) {
 
 //	if (load > 100)
 //		load = 100;
-	drawPercentBar(load,LOAD_POS,ILI9341_DGREEN);
+	drawPercentBar(load, LOAD_POS, ILI9341_DGREEN);
 
 //	if (throttle > 100)
 //		throttle = 100;
-	drawPercentBar(throttle,THR_POS,ILI9341_YELLOW);
+	drawPercentBar(throttle, THR_POS, ILI9341_YELLOW);
 
 //	gpsangle = 30;
 //	int x = 25 + sin(gpsangle) * 50;
@@ -177,6 +179,7 @@ void loop(void) {
 //	tft.drawLine(190,RPM_POS,x,y,ILI9341_YELLOW);
 
 	logNewRow();
+	//if (newdata)
 	gpsdump(gps);
 	logIntData(rpm);
 	logIntData(load);
@@ -193,7 +196,7 @@ void loop(void) {
 //	throttle += 3;
 }
 
-void drawPercentBar(int value,int x, int color) {
+void drawPercentBar(int value, int x, int color) {
 	int lx = 2.4 * value;
 	tft.fillRect(0, x, lx, 10, color);
 	tft.fillRect(lx, x, 240 - lx, 10, ILI9341_BLACK);
@@ -264,11 +267,14 @@ static void gpsdump(TinyGPS &gps) {
 	print_date(gps);
 
 	tft.setTextSize(5);
-	float speed = gps.f_speed_kmph();
+	//float speed = gps.f_speed_kmph();
 	tft.setCursor(10, SPEED_POS + ALIGN_X);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_DRED);
-	print_float(speed, TinyGPS::GPS_INVALID_F_SPEED, 6, 2);
-	logFloatData(speed, 2);
+	if (gps.f_speed_kmph() != TinyGPS::GPS_INVALID_F_SPEED)
+		print_float(gps.f_speed_kmph(), TinyGPS::GPS_INVALID_F_SPEED, 6, 2);
+	else
+		print_int(obdspeed, 255, 6);
+	logFloatData(obdspeed, 2);
 	tft.setTextSize(2);
 
 	tft.setCursor(0, INFO_POS);
@@ -284,14 +290,14 @@ static void gpsdump(TinyGPS &gps) {
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
 	print_float(gps.f_altitude(), TinyGPS::GPS_INVALID_F_ALTITUDE, 8, 2);
 	logFloatData(gps.f_altitude(), 2);
-	
+
 	tft.setTextColor(ILI9341_WHITE);
 	tft.print("Angle:     ");
 	gpsangle = gps.f_course();
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
 	print_float(gpsangle, TinyGPS::GPS_INVALID_F_ANGLE, 7, 2);
 	logFloatData(gpsangle, 1);
-	
+
 	tft.setTextColor(ILI9341_WHITE);
 	tft.print("Distance:  ");
 	float dist = TinyGPS::distance_between(flat, flon, LONDON_LAT, LONDON_LON)
@@ -371,13 +377,13 @@ void clearLine(int len) {
 //  tft.fillScreen(ILI9341_BLACK);
 }
 
-static void print_int(unsigned long val, unsigned long invalid, int len) {
+static void print_int(unsigned int val, unsigned int invalid, int len) {
 //	clearLine(0);
 	char sz[32];
 	if (val == invalid)
 		strcpy(sz, "*******");
 	else
-		sprintf(sz, "%ld", val);
+		sprintf(sz, "%d", val);
 	sz[len] = 0;
 	for (int i = strlen(sz); i < len; ++i)
 		sz[i] = ' ';
@@ -437,9 +443,9 @@ static void print_date(TinyGPS &gps) {
 	gps.crack_datetime(&year, &month, &day, &hour, &minute, &second,
 			&hundredths, &age);
 	if (age == TinyGPS::GPS_INVALID_AGE) {
-		tft.println("*******    *******    ");
+		tft.println("*******    *******");
 //		file.print(",");
-//		file.print("*******    *******    ");
+//		file.print("*******    *******");
 	} else {
 		char sz[32];
 		sprintf(sz, "%02d/%02d/%02d %02d:%02d:%02d ", month, day, year, hour,
