@@ -43,8 +43,6 @@
 #define ERROR_POS_Y 300
 
 //Pin Definitions
-#define GPS_RxPin 3
-#define GPS_TxPin 4
 #define nss Serial3
 //SoftwareSerial nss(GPS_RxPin, GPS_TxPin);
 
@@ -146,18 +144,33 @@ void loop(void) {
 
 	bool newdata = false;
 	unsigned long start = millis();
+	bool obd_connected = false;
 
 	while (millis() - start < 1000) {
 		if (feedgps())
 			newdata = true;
+		if (obd_connected) {
+			obd.read(PID_ENGINE_LOAD, load);
+			obd.read(PID_THROTTLE, throttle);
+			drawPercentBar(load, LOAD_POS, ILI9341_DGREEN, "load:");
+			drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
+		}
 	}
 
 	if (obd.read(PID_RPM, rpm)) {
+
 		obd.read(PID_ENGINE_LOAD, load);
 		obd.read(PID_SPEED, obdspeed);
 		obd.read(PID_THROTTLE, throttle);
 //		obd.read(PID_FUEL_PRESSURE, frp);
 //		obd.read(PID_MAF_FLOW, maf);
+		obd_connected = true;
+	} else {
+		obd_connected = false;
+		load = 0;
+		obdspeed = 0;
+		throttle = 0;
+		rpm = 0;
 	}
 
 	tft.setCursor(10, RPM_POS + ALIGN_X);
@@ -167,11 +180,11 @@ void loop(void) {
 
 //	if (load > 100)
 //		load = 100;
-	drawPercentBar(load, LOAD_POS, ILI9341_DGREEN);
+	drawPercentBar(load, LOAD_POS, ILI9341_DGREEN, "load:");
 
 //	if (throttle > 100)
 //		throttle = 100;
-	drawPercentBar(throttle, THR_POS, ILI9341_YELLOW);
+	drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
 
 //	gpsangle = 30;
 //	int x = 25 + sin(gpsangle) * 50;
@@ -192,18 +205,16 @@ void loop(void) {
 	if (!file.sync() || file.getWriteError())
 		error("write error");
 
-//	load += 2;
-//	throttle += 3;
 }
 
-void drawPercentBar(int value, int x, int color) {
+void drawPercentBar(int value, int x, int color, const char *label) {
 	int lx = 2.4 * value;
 	tft.fillRect(0, x, lx, 10, color);
 	tft.fillRect(lx, x, 240 - lx, 10, ILI9341_BLACK);
 	tft.setCursor(2, x + 1);
 	tft.setTextSize(1);
 	tft.setTextColor(ILI9341_WHITE);
-	tft.print("load:");
+	tft.print(label);
 	tft.setCursor(40, x + 1);
 	print_fixint(value, -1, 6);
 }
@@ -270,12 +281,15 @@ static void gpsdump(TinyGPS &gps) {
 	//float speed = gps.f_speed_kmph();
 	tft.setCursor(10, SPEED_POS + ALIGN_X);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_DRED);
-	if (gps.f_speed_kmph() != TinyGPS::GPS_INVALID_F_SPEED)
+	if (gps.f_speed_kmph() != TinyGPS::GPS_INVALID_F_SPEED) {
 		print_float(gps.f_speed_kmph(), TinyGPS::GPS_INVALID_F_SPEED, 6, 2);
-	else
+		drawSourceIndicator(200, SPEED_POS + 2, "gps", ILI9341_YELLOW,
+				ILI9341_DRED);
+	} else {
 		print_int(obdspeed, 255, 6);
-	logFloatData(obdspeed, 2);
-	tft.setTextSize(2);
+		drawSourceIndicator(200, SPEED_POS + 2, "obd", ILI9341_YELLOW,
+				ILI9341_DRED);
+	}
 
 	tft.setCursor(0, INFO_POS);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
@@ -306,6 +320,7 @@ static void gpsdump(TinyGPS &gps) {
 	print_float(dist, TinyGPS::GPS_INVALID_F_ANGLE, 3, 2);
 	logDistData((float) dist, 1);
 	tft.println();
+	gps.stats(&chars, &sentences, &failed);
 	tft.setTextSize(1);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 
@@ -443,7 +458,7 @@ static void print_date(TinyGPS &gps) {
 	gps.crack_datetime(&year, &month, &day, &hour, &minute, &second,
 			&hundredths, &age);
 	if (age == TinyGPS::GPS_INVALID_AGE) {
-		tft.println("*******    *******");
+		tft.println("*******      *******");
 //		file.print(",");
 //		file.print("*******    *******");
 	} else {
@@ -464,3 +479,11 @@ static void print_str(const char *str, int len) {
 	feedgps();
 }
 
+void drawSourceIndicator(int xpos, int ypos, const char *str, int fg_color,
+		int bg_color) {
+	tft.setCursor(xpos, ypos);
+	tft.setTextColor(fg_color, bg_color);
+	tft.setTextSize(2);
+	tft.print(str);
+
+}

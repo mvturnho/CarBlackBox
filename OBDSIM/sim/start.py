@@ -50,6 +50,7 @@ Received_str = "";
 while 1:
 #    print "READ";
     if(load > 255):  load = 0;
+    if(thr > 255):  thr = 0;
     if(speed > 255): speed = 0;
     Received_str = readLine();
 #    print Received_str;
@@ -139,9 +140,10 @@ while 1:
         ser.write("\r41 0E DA\r")
         ser.write(">")
     elif (Received_str == "0111"):  # Throttle position
-        print "# Throttle position"
-        ser.write("\r41 11 CA\r")
-        ser.write(">")
+        print "# Throttle position";
+        ser.write("\r41 11  "+ format(thr, '02x') + "\r");
+        ser.write(">");
+        thr = thr + 1;
     elif (Received_str == "012F"):  # Fuel level input
             ser.write("\r41 2F DC\r")
             ser.write(">")
