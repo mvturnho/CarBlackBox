@@ -70,6 +70,9 @@ int throttle = 50;
 int frp = 0;
 int maf = 0;
 float gpsangle;
+
+bool obd_connected = false;
+
 // Error messages stored in flash.
 #define error(msg) error_P(PSTR(msg))
 //------------------------------------------------------------------------------
@@ -79,8 +82,8 @@ void error_P(const char* msg) {
 
 void setup() {
 
+	char fileName[13] = FILE_BASE_NAME "000.CSV";
 	const uint8_t BASE_NAME_SIZE = sizeof(FILE_BASE_NAME) - 1;
-	char fileName[13] = FILE_BASE_NAME "00.CSV";
 
 	Serial.begin(115200);
 
@@ -90,11 +93,12 @@ void setup() {
 	delay(200);
 	//tft.fillScreen(ILI9341_BLACK);
 	tft.setRotation(0);	// Initialize the SD card at SPI_HALF_SPEED to avoid bus errors with
-
+	tft.print("open file :");
 	// breadboards.  use SPI_FULL_SPEED for better performance.
 	if (!sd.begin(SD_CS, SPI_HALF_SPEED))
 		sd.initErrorHalt();
 	while (sd.exists(fileName)) {
+		tft.print(".");
 		if (fileName[BASE_NAME_SIZE + 1] != '9') {
 			fileName[BASE_NAME_SIZE + 1]++;
 		} else if (fileName[BASE_NAME_SIZE] != '9') {
@@ -105,6 +109,7 @@ void setup() {
 			fileName[BASE_NAME_SIZE] = '0';
 		}
 	}
+	tft.println(fileName);
 	if (!file.open(fileName, O_CREAT | O_WRITE | O_EXCL))
 		error("file.open");
 	do {
@@ -144,21 +149,20 @@ void loop(void) {
 
 	bool newdata = false;
 	unsigned long start = millis();
-	bool obd_connected = false;
+	
 
 	while (millis() - start < 1000) {
 		if (feedgps())
 			newdata = true;
-		if (obd_connected) {
+		if (obd_connected==true) {
 			obd.read(PID_ENGINE_LOAD, load);
-			obd.read(PID_THROTTLE, throttle);
+//			obd.read(PID_THROTTLE, throttle);
 			drawPercentBar(load, LOAD_POS, ILI9341_DGREEN, "load:");
-			drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
+//			drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
 		}
 	}
 
 	if (obd.read(PID_RPM, rpm)) {
-
 		obd.read(PID_ENGINE_LOAD, load);
 		obd.read(PID_SPEED, obdspeed);
 		obd.read(PID_THROTTLE, throttle);
@@ -230,30 +234,16 @@ void writeHeader() {
 unsigned long testText() {
 	tft.fillScreen(ILI9341_BLACK);
 	unsigned long start = micros();
+	tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
 	tft.setCursor(0, 0);
-	tft.setTextColor(ILI9341_WHITE);
-	tft.setTextSize(1);
-	tft.println("Hello World!");
-	tft.setTextColor(ILI9341_YELLOW);
-	tft.setTextSize(2);
-	tft.println(1234.56);
-	tft.setTextColor(ILI9341_RED);
-	tft.setTextSize(3);
-	tft.println(0xDEADBEEF, HEX);
-	tft.println();
-	tft.setTextColor(ILI9341_GREEN);
 	tft.setTextSize(5);
 	tft.println("GPS LOG");
 	tft.setTextSize(2);
-	tft.println("I implore thee,");
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	tft.println("Initializing");
+	tft.println();
 	tft.setTextSize(1);
-	tft.println("my foonting turlingdromes.");
-	tft.println("And hooptiously drangle me");
-	tft.println("with crinkly bindlewurdles,");
-	tft.println("Or I will rend thee");
-	tft.println("in the gobberwarts");
-	tft.println("with my blurglecruncheon,");
-	tft.println("see if I don't!");
+	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
 	return micros() - start;
 }
 
@@ -382,16 +372,6 @@ static bool feedgps() {
 	return false;
 }
 
-void clearLine(int len) {
-//    int x = tft.getCursor(true);
-	// int y = tft.getCursor(false);
-//  if(len == 0)
-//    len = tft.width();
-//  tft.fillRect(x,y,len-x,7,ILI9341_BLACK);
-	//tft.clearLine(7);
-//  tft.fillScreen(ILI9341_BLACK);
-}
-
 static void print_int(unsigned int val, unsigned int invalid, int len) {
 //	clearLine(0);
 	char sz[32];
@@ -463,7 +443,7 @@ static void print_date(TinyGPS &gps) {
 //		file.print("*******    *******");
 	} else {
 		char sz[32];
-		sprintf(sz, "%02d/%02d/%02d %02d:%02d:%02d ", month, day, year, hour,
+		sprintf(sz, "%02d/%02d/%02d  %02d:%02d:%02d ", month, day, year, hour,
 				minute, second);
 		tft.print(sz);
 	}
