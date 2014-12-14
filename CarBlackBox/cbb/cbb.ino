@@ -14,13 +14,16 @@
  ****************************************************/
 
 //#include <HardwareSerial.h>
-#include <SoftwareSerial.h>
+//#include <SoftwareSerial.h>
 #include <TinyGPS.h>
 #include <SPI.h>
 #include <ILI9341_t3.h>
 #include <Wire.h>
 #include <OBD.h>
 #include <SdFat.h>
+#include <EEPROM.h>
+
+#define DEBUG
 
 #define FILE_BASE_NAME "DATA"
 // For the Adafruit shield, these are the default.
@@ -46,6 +49,8 @@
 #define nss Serial3
 //SoftwareSerial nss(GPS_RxPin, GPS_TxPin);
 
+#define filenum_addr 0x10
+
 const uint32_t SAMPLE_INTERVAL_MS = 100;
 
 COBD obd;
@@ -70,22 +75,26 @@ int throttle = 50;
 int frp = 0;
 int maf = 0;
 float gpsangle;
+char fileName[14];
 
 bool obd_connected = false;
+bool has_sd = false;
 
 // Error messages stored in flash.
 #define error(msg) error_P(PSTR(msg))
 //------------------------------------------------------------------------------
 void error_P(const char* msg) {
-	sd.errorHalt_P(msg);
+	//sd.errorHalt_P(msg);
+	has_sd = false;
 }
 
 void setup() {
 
-	char fileName[13] = FILE_BASE_NAME "000.CSV";
 	const uint8_t BASE_NAME_SIZE = sizeof(FILE_BASE_NAME) - 1;
 
+#if defined(DEBUG)
 	Serial.begin(115200);
+#endif
 
 	//initialize TFT display
 	tft.begin();
@@ -93,53 +102,34 @@ void setup() {
 	delay(200);
 	//tft.fillScreen(ILI9341_BLACK);
 	tft.setRotation(0);	// Initialize the SD card at SPI_HALF_SPEED to avoid bus errors with
-	tft.print("open file :");
-	// breadboards.  use SPI_FULL_SPEED for better performance.
-	if (!sd.begin(SD_CS, SPI_HALF_SPEED))
-		sd.initErrorHalt();
-	while (sd.exists(fileName)) {
-		tft.print(".");
-		if (fileName[BASE_NAME_SIZE + 1] != '9') {
-			fileName[BASE_NAME_SIZE + 1]++;
-		} else if (fileName[BASE_NAME_SIZE] != '9') {
-			fileName[BASE_NAME_SIZE + 1] = '0';
-			fileName[BASE_NAME_SIZE]++;
-		} else { //rotate after 99 files
-			fileName[BASE_NAME_SIZE + 1] = '0';
-			fileName[BASE_NAME_SIZE] = '0';
-		}
-	}
-	tft.println(fileName);
-	if (!file.open(fileName, O_CREAT | O_WRITE | O_EXCL))
-		error("file.open");
-	do {
-		delay(10);
-	} while (Serial.read() >= 0);
 
+	has_sd = openFile(fileName);
+
+#if defined(DEBUG)
 	Serial.print(F("Logging to: "));
 	Serial.println(fileName);
 	Serial.println(F("Type any character to stop"));
-
+#endif
 	// Write data header.
+	tft.print("init new log file    ... ");
 	writeHeader();
-
+	tft.println("done");
 	// Start on a multiple of the sample interval.
 //	logTime = micros() / (1000UL * SAMPLE_INTERVAL_MS) + 1;
 //	logTime *= 1000UL * SAMPLE_INTERVAL_MS;
+	tft.print("init gps Serial1     ... ");
 	nss.begin(9600);
+	tft.println("done");
 	rowindex = 1;
-
+	tft.print("init obd Serial3     ... ");
 	obd.begin();
 
 	// initiate OBD-II connection until success
 	while (!obd.init())
-		;
-	tft.fillScreen(ILI9341_BLACK);
-	tft.setCursor(0, 145);
-	tft.fillRoundRect(0, SPEED_POS, 240, 50, 10, ILI9341_DRED);
-	tft.fillRoundRect(0, RPM_POS, 240, 50, 10, ILI9341_DBLUE);
-	tft.drawFastHLine(0, 25, 240, ILI9341_RED);
-	tft.drawFastHLine(0, 26, 240, ILI9341_RED);
+		tft.print(".");
+	tft.println("done");
+	delay(2000);
+	drawMetricScreen();
 //	gpsdump(gps);
 }
 
@@ -149,12 +139,11 @@ void loop(void) {
 
 	bool newdata = false;
 	unsigned long start = millis();
-	
 
 	while (millis() - start < 1000) {
 		if (feedgps())
 			newdata = true;
-		if (obd_connected==true) {
+		if (obd_connected == true) {
 			obd.read(PID_ENGINE_LOAD, load);
 //			obd.read(PID_THROTTLE, throttle);
 			drawPercentBar(load, LOAD_POS, ILI9341_DGREEN, "load:");
@@ -195,20 +184,62 @@ void loop(void) {
 //	int y = 25 + cos(gpsangle) * 50;
 //	tft.drawLine(190,RPM_POS,x,y,ILI9341_YELLOW);
 
-	logNewRow();
 	//if (newdata)
 	gpsdump(gps);
-	logIntData(rpm);
-	logIntData(load);
-	logIntData(throttle);
-	logIntData(frp);
-	logIntData(maf);
-	logEndRow();
-
+	if (has_sd) {
+		logNewRow();
+		logIntData(rpm);
+		logIntData(load);
+		logIntData(throttle);
+		logIntData(frp);
+		logIntData(maf);
+		logEndRow();
 // Force data to SD and update the directory entry to avoid data loss.
-	if (!file.sync() || file.getWriteError())
-		error("write error");
+		if (!file.sync() || file.getWriteError())
+			error("write error");
+	}
 
+}
+
+bool openFile(char *fileName) {
+	//The filenumber comes from eeprom
+	byte fnum = EEPROM.read(filenum_addr);
+	if (fnum > 254)
+		fnum = 0;
+	else
+		fnum++;
+	EEPROM.write(filenum_addr, fnum);
+	sprintf(fileName, "%03d-CBB.CSV", fnum);
+	tft.print("init SD card         ... ");
+
+	// breadboards.  use SPI_FULL_SPEED for better performance.
+	if (!sd.begin(SD_CS, SPI_HALF_SPEED)) {
+		//sd.initErrorHalt();
+		tft.println("failed");
+		return false;
+	}
+	tft.println("done");
+	if (sd.exists(fileName)) {
+		tft.print("overwrite file       ... ");
+	} else {
+		tft.print("open ");
+		tft.print(fileName);
+		tft.print("     ... ");
+	}
+	if (!file.open(fileName, O_CREAT | O_WRITE | O_EXCL)) {
+		error("file.open");
+	}
+	tft.println("done");
+	return true;
+}
+
+void drawMetricScreen() {
+	tft.fillScreen(ILI9341_BLACK);
+	tft.setCursor(0, 145);
+	tft.fillRoundRect(0, SPEED_POS, 240, 50, 10, ILI9341_DRED);
+	tft.fillRoundRect(0, RPM_POS, 240, 50, 10, ILI9341_DBLUE);
+	tft.drawFastHLine(0, 25, 240, ILI9341_RED);
+	tft.drawFastHLine(0, 26, 240, ILI9341_RED);
 }
 
 void drawPercentBar(int value, int x, int color, const char *label) {
@@ -244,6 +275,7 @@ unsigned long testText() {
 	tft.println();
 	tft.setTextSize(1);
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+
 	return micros() - start;
 }
 
@@ -314,6 +346,8 @@ static void gpsdump(TinyGPS &gps) {
 	tft.setTextSize(1);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 
+	tft.setCursor(0, ERROR_POS_Y);
+	tft.print(fileName);
 	tft.setCursor(ERROR_POS_X, ERROR_POS_Y);
 
 	tft.print("gps errors:    ");
