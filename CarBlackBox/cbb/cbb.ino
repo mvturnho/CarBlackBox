@@ -100,9 +100,10 @@ void setup() {
 
 	//initialize TFT display
 	tft.begin();
+	tft.fillScreen(ILI9341_BLACK);
 	testText();
 	delay(200);
-	//tft.fillScreen(ILI9341_BLACK);
+
 	tft.setRotation(0);	// Initialize the SD card at SPI_HALF_SPEED to avoid bus errors with
 
 	has_sd = openFile(fileName);
@@ -131,7 +132,10 @@ void setup() {
 	tft.print("init obd Serial3     ");
 
 	startOBD();
-
+	for (int i = 0; i < 320; i++) {
+		int s = 20 * sin((long double) i / 10);
+		tft.drawPixel(i, 200 + (int) s, ILI9341_GREEN);
+	}
 	delay(2000);
 	drawMetricScreen();
 //	gpsdump(gps);
@@ -265,6 +269,7 @@ bool openFile(char *fileName) {
 void drawMetricScreen() {
 	tft.fillScreen(ILI9341_BLACK);
 	tft.setCursor(0, 145);
+
 	tft.fillRoundRect(0, SPEED_POS, 240, 50, 10, ILI9341_DRED);
 	tft.fillRoundRect(0, RPM_POS, 240, 50, 10, ILI9341_DBLUE);
 	tft.drawFastHLine(0, 25, 240, ILI9341_RED);
@@ -292,12 +297,18 @@ void writeHeader() {
 }
 
 unsigned long testText() {
-	tft.fillScreen(ILI9341_BLACK);
+
 	unsigned long start = micros();
-	tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
-	tft.setCursor(0, 0);
+	tft.setTextColor(ILI9341_BLUE, ILI9341_BLACK);
 	tft.setTextSize(5);
-	tft.println("GPS LOG");
+	tft.setCursor(80, 30);
+	tft.println("CBB");
+	tft.setTextSize(2);
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	tft.println("   Car Black Box");
+	tft.drawFastHLine(0, 110, 240, ILI9341_RED);
+	tft.drawFastHLine(0, 111, 240, ILI9341_RED);
+	tft.setCursor(0, 120);
 	tft.setTextSize(2);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.println("Initializing");
@@ -341,7 +352,7 @@ static void gpsdump(TinyGPS &gps) {
 			if (blink)
 				drawSourceIndicator(200, SPEED_POS + 2, "NC ", ILI9341_YELLOW,
 						ILI9341_DRED);
-			else 
+			else
 				tft.fillRect(200, SPEED_POS, 30, 20, ILI9341_DRED);
 		}
 	}
