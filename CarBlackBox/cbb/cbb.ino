@@ -113,23 +113,25 @@ void setup() {
 	Serial.println(F("Type any character to stop"));
 #endif
 	// Write data header.
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.print("init new log file    ... ");
 	writeHeader();
+	tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
 	tft.println("done");
 	// Start on a multiple of the sample interval.
 //	logTime = micros() / (1000UL * SAMPLE_INTERVAL_MS) + 1;
 //	logTime *= 1000UL * SAMPLE_INTERVAL_MS;
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.print("init gps Serial1     ... ");
 	nss.begin(9600);
+	tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
 	tft.println("done");
 	rowindex = 1;
-	tft.print("init obd Serial3     ... ");
-	obd.begin();
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	tft.print("init obd Serial3     ");
 
-	// initiate OBD-II connection until success
-	while (!obd.init())
-		tft.print(".");
-	tft.println("done");
+	startOBD();
+
 	delay(2000);
 	drawMetricScreen();
 //	gpsdump(gps);
@@ -152,14 +154,15 @@ void loop(void) {
 			drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
 		}
 	}
+	if (obd_connected == false)
+		obd_connected = obd.init();
 
-	if (obd.read(PID_RPM, rpm)) {
+	if (obd_connected && obd.read(PID_RPM, rpm)) {
 		obd.read(PID_ENGINE_LOAD, load);
 		obd.read(PID_SPEED, obdspeed);
 		obd.read(PID_THROTTLE, throttle);
 //		obd.read(PID_FUEL_PRESSURE, frp);
 //		obd.read(PID_MAF_FLOW, maf);
-		obd_connected = true;
 	} else {
 		obd_connected = false;
 		load = 0;
@@ -195,6 +198,26 @@ void loop(void) {
 		if (!file.sync() || file.getWriteError())
 			error("SD write error");
 	}
+}
+
+void startOBD() {
+	obd.begin();
+
+	// initiate OBD-II connection until success
+	int retry = 0;
+	while (retry < 3) {
+		if (!obd_connected)
+			obd_connected = obd.init();
+		tft.print(".");
+		retry++;
+	}
+	if (obd_connected) {
+		tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+		tft.println(" done");
+	} else {
+		tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+		tft.println(" failed");
+	}
 
 }
 
@@ -206,16 +229,20 @@ bool openFile(char *fileName) {
 	else
 		fnum++;
 	sprintf(fileName, "%03d-CBB.CSV", fnum);
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.print("init SD card         ... ");
 
 	// breadboards.  use SPI_FULL_SPEED for better performance.
 	if (!sd.begin(SD_CS, SPI_HALF_SPEED)) {
 		//sd.initErrorHalt();
+		tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
 		tft.println("failed");
 		sprintf(fileName, "No SD card");
 		return false;
 	}
+	tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
 	tft.println("done");
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	if (sd.exists(fileName)) {
 		tft.print("overwrite file       ... ");
 	} else {
@@ -225,8 +252,12 @@ bool openFile(char *fileName) {
 	}
 	if (!file.open(fileName, O_CREAT | O_WRITE | O_EXCL)) {
 		sprintf(fileName, "ERROR SD card");
+		tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+		tft.println("failed");
+	} else {
+		tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+		tft.println("done");
 	}
-	tft.println("done");
 	EEPROM.write(filenum_addr, fnum);
 	return true;
 }
@@ -297,19 +328,27 @@ static void gpsdump(TinyGPS &gps) {
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
 	print_date(gps);
 
-	tft.setTextSize(5);
 	//float speed = gps.f_speed_kmph();
-	tft.setCursor(10, SPEED_POS + ALIGN_Y);
-	tft.setTextColor(ILI9341_WHITE, ILI9341_DRED);
 	if (gps.f_speed_kmph() != TinyGPS::GPS_INVALID_F_SPEED) {
-		print_float(gps.f_speed_kmph(), TinyGPS::GPS_INVALID_F_SPEED, 6, 1);
+		obdspeed = gps.f_speed_kmph();
 		drawSourceIndicator(200, SPEED_POS + 2, "gps", ILI9341_YELLOW,
 				ILI9341_DRED);
 	} else {
-		print_float(obdspeed * 1.0, 255, 6,1);
-		drawSourceIndicator(200, SPEED_POS + 2, "obd", ILI9341_YELLOW,
-				ILI9341_DRED);
+		if (obd_connected)
+			drawSourceIndicator(200, SPEED_POS + 2, "obd", ILI9341_YELLOW,
+					ILI9341_DRED);
+		else {
+			if (blink)
+				drawSourceIndicator(200, SPEED_POS + 2, "NC ", ILI9341_YELLOW,
+						ILI9341_DRED);
+			else 
+				tft.fillRect(200, SPEED_POS, 30, 20, ILI9341_DRED);
+		}
 	}
+	tft.setTextColor(ILI9341_WHITE, ILI9341_DRED);
+	tft.setCursor(10, SPEED_POS + ALIGN_Y);
+	tft.setTextSize(5);
+	print_float(obdspeed * 1.0, TinyGPS::GPS_INVALID_F_SPEED, 6, 1);
 
 	tft.setCursor(10, RPM_POS + ALIGN_Y);
 	tft.setTextSize(5);
