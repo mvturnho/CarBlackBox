@@ -43,7 +43,7 @@
 #define INFO_POS 220
 #define ALIGN_X 6
 #define ERROR_POS_X 120
-#define ERROR_POS_Y 300
+#define ERROR_POS_Y 310
 
 //Pin Definitions
 #define nss Serial3
@@ -79,6 +79,7 @@ char fileName[14];
 
 bool obd_connected = false;
 bool has_sd = false;
+bool blink = true;
 
 // Error messages stored in flash.
 #define error(msg) error_P(PSTR(msg))
@@ -86,6 +87,7 @@ bool has_sd = false;
 void error_P(const char* msg) {
 	//sd.errorHalt_P(msg);
 	has_sd = false;
+	sprintf(fileName, msg);
 }
 
 void setup() {
@@ -196,7 +198,7 @@ void loop(void) {
 		logEndRow();
 // Force data to SD and update the directory entry to avoid data loss.
 		if (!file.sync() || file.getWriteError())
-			error("write error");
+			error("SD write error");
 	}
 
 }
@@ -208,7 +210,6 @@ bool openFile(char *fileName) {
 		fnum = 0;
 	else
 		fnum++;
-	EEPROM.write(filenum_addr, fnum);
 	sprintf(fileName, "%03d-CBB.CSV", fnum);
 	tft.print("init SD card         ... ");
 
@@ -216,6 +217,7 @@ bool openFile(char *fileName) {
 	if (!sd.begin(SD_CS, SPI_HALF_SPEED)) {
 		//sd.initErrorHalt();
 		tft.println("failed");
+		sprintf(fileName, "No SD card");
 		return false;
 	}
 	tft.println("done");
@@ -227,9 +229,10 @@ bool openFile(char *fileName) {
 		tft.print("     ... ");
 	}
 	if (!file.open(fileName, O_CREAT | O_WRITE | O_EXCL)) {
-		error("file.open");
+		sprintf(fileName, "ERROR SD card");
 	}
 	tft.println("done");
+	EEPROM.write(filenum_addr, fnum);
 	return true;
 }
 
@@ -344,14 +347,23 @@ static void gpsdump(TinyGPS &gps) {
 	tft.println();
 	gps.stats(&chars, &sentences, &failed);
 	tft.setTextSize(1);
-	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-
+	if (has_sd)
+		tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	else {
+		if (blink)
+			tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+		else
+			tft.setTextColor(ILI9341_GRAY, ILI9341_BLACK);
+	}
 	tft.setCursor(0, ERROR_POS_Y);
 	tft.print(fileName);
-	tft.setCursor(ERROR_POS_X, ERROR_POS_Y);
 
-	tft.print("gps errors:    ");
-	print_int(failed, 0xFFFFFFFF, 9);
+	tft.setCursor(ERROR_POS_X, ERROR_POS_Y);
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	tft.print("GPS errors:    ");
+	print_int(failed, 0xFFFFFFFF, 6);
+	
+	blink = blink ^ 1;
 
 }
 
