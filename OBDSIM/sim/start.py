@@ -5,6 +5,7 @@ Created on 13 dec. 2014
 '''
 import serial
 import re
+from random import randint
 
 # Please note that, 13 = COM14. This is the incoming COM port for my PC (windows 7). Might be different for your machine.
 ser = serial.Serial(4, 38400, 8, 'N', 1, timeout=0, writeTimeout=0, interCharTimeout=0);  # open first serial port. Read timeout = timeout = 1sec. writeTimeout = 2 secs
@@ -37,6 +38,12 @@ def rpmtoobd(val):
     B = val % 256;
     retval = format(A, '02x') + " " + format(B, '02x');
     return retval 
+
+def obdRevConvert_04(val):
+    A = (255 * val) / 100;
+    retval = format(A, '02x');
+    return retval;
+
 #================================================
 # Following is the main code for communicating with "Torque Lite"
 #================================================
@@ -49,8 +56,8 @@ rpm = 0;
 Received_str = "";
 while 1:
 #    print "READ";
-    if(load > 255):  load = 0;
-    if(thr > 255):  thr = 0;
+    if(load > 100):  load = 0;
+    if(thr > 100):  thr = 0;
     if(speed > 255): speed = 0;
     Received_str = readLine();
 #    print Received_str;
@@ -99,7 +106,7 @@ while 1:
         ser.write(">")
     elif (Received_str == "0104"):  # Engine load
         print "engine load"
-        ser.write("\r41 04 " + format(load, '02x') + "\r")
+        ser.write("\r41 04 " + obdRevConvert_04(load) + "\r")
         ser.write(">")
         load = load + 1;
     elif (Received_str == "0105"):  # Coolant temperature
@@ -114,11 +121,11 @@ while 1:
         ser.write(">")
     elif (Received_str == "010C"):  # Engine RPM
         print "# Engine RPM"
-        rpm = rpm + 1;
         retval = val = rpmtoobd(rpm);
         print "41 0C " + retval;
         ser.write("\r41 0C " + retval + "\r");  # 0D CA\r")
         ser.write(">")
+        rpm = rpm + 1;
     elif (Received_str == "010D"):  # Vehicle speed
         print "# Vehicle speed " + str(speed)
         print "41 0D " + format(speed, '02x')
@@ -141,9 +148,9 @@ while 1:
         ser.write(">")
     elif (Received_str == "0111"):  # Throttle position
         print "# Throttle position";
-        ser.write("\r41 11  "+ format(thr, '02x') + "\r");
+        ser.write("\r41 11 " + obdRevConvert_04(thr) + "\r");
         ser.write(">");
-        thr = thr + 1;
+        thr = thr + randint(0,3);
     elif (Received_str == "012F"):  # Fuel level input
             ser.write("\r41 2F DC\r")
             ser.write(">")

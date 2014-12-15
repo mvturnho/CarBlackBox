@@ -41,7 +41,7 @@
 #define LOAD_POS 160
 #define THR_POS  175
 #define INFO_POS 220
-#define ALIGN_X 6
+#define ALIGN_Y 6
 #define ERROR_POS_X 120
 #define ERROR_POS_Y 310
 
@@ -147,9 +147,9 @@ void loop(void) {
 			newdata = true;
 		if (obd_connected == true) {
 			obd.read(PID_ENGINE_LOAD, load);
-//			obd.read(PID_THROTTLE, throttle);
+			obd.read(PID_THROTTLE, throttle);
 			drawPercentBar(load, LOAD_POS, ILI9341_DGREEN, "load:");
-//			drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
+			drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
 		}
 	}
 
@@ -167,11 +167,6 @@ void loop(void) {
 		throttle = 0;
 		rpm = 0;
 	}
-
-	tft.setCursor(10, RPM_POS + ALIGN_X);
-	tft.setTextSize(5);
-	tft.setTextColor(ILI9341_WHITE, ILI9341_DBLUE);
-	print_fixint(rpm, -1, 6);
 
 //	if (load > 100)
 //		load = 100;
@@ -245,15 +240,15 @@ void drawMetricScreen() {
 	tft.drawFastHLine(0, 26, 240, ILI9341_RED);
 }
 
-void drawPercentBar(int value, int x, int color, const char *label) {
+void drawPercentBar(int value, int y, int color, const char *label) {
 	int lx = 2.4 * value;
-	tft.fillRect(0, x, lx, 10, color);
-	tft.fillRect(lx, x, 240 - lx, 10, ILI9341_BLACK);
-	tft.setCursor(2, x + 1);
+	tft.fillRect(0, y, lx, 10, color);
+	tft.fillRect(lx, y, 240 - lx, 10, ILI9341_BLACK);
+	tft.setCursor(2, y + 1);
 	tft.setTextSize(1);
 	tft.setTextColor(ILI9341_WHITE);
 	tft.print(label);
-	tft.setCursor(40, x + 1);
+	tft.setCursor(40, y + 1);
 	print_fixint(value, -1, 6);
 }
 
@@ -304,17 +299,22 @@ static void gpsdump(TinyGPS &gps) {
 
 	tft.setTextSize(5);
 	//float speed = gps.f_speed_kmph();
-	tft.setCursor(10, SPEED_POS + ALIGN_X);
+	tft.setCursor(10, SPEED_POS + ALIGN_Y);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_DRED);
 	if (gps.f_speed_kmph() != TinyGPS::GPS_INVALID_F_SPEED) {
-		print_float(gps.f_speed_kmph(), TinyGPS::GPS_INVALID_F_SPEED, 6, 2);
+		print_float(gps.f_speed_kmph(), TinyGPS::GPS_INVALID_F_SPEED, 6, 1);
 		drawSourceIndicator(200, SPEED_POS + 2, "gps", ILI9341_YELLOW,
 				ILI9341_DRED);
 	} else {
-		print_int(obdspeed, 255, 6);
+		print_float(obdspeed * 1.0, 255, 6,1);
 		drawSourceIndicator(200, SPEED_POS + 2, "obd", ILI9341_YELLOW,
 				ILI9341_DRED);
 	}
+
+	tft.setCursor(10, RPM_POS + ALIGN_Y);
+	tft.setTextSize(5);
+	tft.setTextColor(ILI9341_WHITE, ILI9341_DBLUE);
+	print_fixint(rpm, 9999, 6);
 
 	tft.setCursor(0, INFO_POS);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
@@ -345,24 +345,15 @@ static void gpsdump(TinyGPS &gps) {
 	print_float(dist, TinyGPS::GPS_INVALID_F_ANGLE, 3, 2);
 	logDistData((float) dist, 1);
 	tft.println();
-	gps.stats(&chars, &sentences, &failed);
-	tft.setTextSize(1);
-	if (has_sd)
-		tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-	else {
-		if (blink)
-			tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
-		else
-			tft.setTextColor(ILI9341_GRAY, ILI9341_BLACK);
-	}
-	tft.setCursor(0, ERROR_POS_Y);
-	tft.print(fileName);
 
+	drawSDCardFileMessage();
+
+	gps.stats(&chars, &sentences, &failed);
 	tft.setCursor(ERROR_POS_X, ERROR_POS_Y);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.print("GPS errors:    ");
 	print_int(failed, 0xFFFFFFFF, 6);
-	
+
 	blink = blink ^ 1;
 
 }
@@ -511,5 +502,18 @@ void drawSourceIndicator(int xpos, int ypos, const char *str, int fg_color,
 	tft.setTextColor(fg_color, bg_color);
 	tft.setTextSize(2);
 	tft.print(str);
+}
 
+void drawSDCardFileMessage() {
+	tft.setTextSize(1);
+	if (has_sd)
+		tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	else {
+		if (blink)
+			tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+		else
+			tft.setTextColor(ILI9341_BLACK, ILI9341_BLACK);
+	}
+	tft.setCursor(0, ERROR_POS_Y);
+	tft.print(fileName);
 }
