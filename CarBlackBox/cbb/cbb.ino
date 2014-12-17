@@ -15,9 +15,10 @@
 
 //#include <HardwareSerial.h>
 //#include <SoftwareSerial.h>
-#include <TinyGPS.h>
+#include <TinyGPS++.h>
 #include <SPI.h>
 #include <ILI9341_t3.h>
+//#include <Bounce2.h>
 #include <Wire.h>
 #include <OBD.h>
 #include <SdFat.h>
@@ -35,6 +36,8 @@
 #define TFT_MISO   12
 
 #define SD_CS      20
+
+#define BUTTON_PIN 5
 
 #define SPEED_POS 40
 #define RPM_POS 100
@@ -57,8 +60,10 @@ COBD obd;
 
 // Use hardware SPI (on Uno, #13, #12, #11) 
 ILI9341_t3 tft = ILI9341_t3(TFT_CS, TFT_DC, TFT_RST);
+// Instantiate a Bounce object
+//Bounce debouncer = Bounce(); 
 
-TinyGPS gps;
+TinyGPSPlus gps;
 //HardwareSerial nss(GPS_RxPin, GPS_TxPin);
 // File system object.
 SdFat sd;
@@ -70,6 +75,7 @@ int rowindex;
 
 int rpm = 0;
 int obdspeed = 10;
+float speed = 0;
 int load = 50; //percent
 int throttle = 50;
 int frp = 0;
@@ -77,9 +83,32 @@ int maf = 0;
 float gpsangle;
 char fileName[14];
 
+typedef enum {
+	main_scr, sat_scr
+} mode;
+mode screen_mode = sat_scr;
+
 bool obd_connected = false;
 bool has_sd = false;
 bool blink = true;
+
+//For Satelites screen
+static const int MAX_SATELLITES = 40;
+
+TinyGPSCustom totalGPGSVMessages(gps, "GPGSV", 1); // $GPGSV sentence, first element
+TinyGPSCustom messageNumber(gps, "GPGSV", 2); // $GPGSV sentence, second element
+TinyGPSCustom satsInView(gps, "GPGSV", 3);     // $GPGSV sentence, third element
+TinyGPSCustom satNumber[4]; // to be initialized later
+TinyGPSCustom elevation[4];
+TinyGPSCustom azimuth[4];
+TinyGPSCustom snr[4];
+
+struct {
+	bool active;
+	int elevation;
+	int azimuth;
+	int snr;
+} sats[MAX_SATELLITES];
 
 // Error messages stored in flash.
 #define error(msg) error_P(PSTR(msg))
@@ -97,7 +126,11 @@ void setup() {
 #if defined(DEBUG)
 	Serial.begin(115200);
 #endif
-
+	pinMode(BUTTON_PIN, INPUT);
+	digitalWrite(BUTTON_PIN, HIGH);
+	// After setting up the button, setup debouncer
+//	debouncer.attach(BUTTON_PIN);
+//	debouncer.interval(5);
 	//initialize TFT display
 	tft.begin();
 	tft.fillScreen(ILI9341_BLACK);
@@ -130,34 +163,60 @@ void setup() {
 	rowindex = 1;
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.print("init obd Serial3     ");
-
 	startOBD();
+
 	for (int i = 0; i < 320; i++) {
 		int s = 20 * sin((long double) i / 10);
-		tft.drawPixel(i, 200 + (int) s, ILI9341_GREEN);
+		tft.drawPixel(i, 300 + (int) s, ILI9341_GREEN);
+		delay(5);
 	}
+
+	// Initialize all the uninitialized TinyGPSCustom objects
+	for (int i = 0; i < 4; ++i) {
+		satNumber[i].begin(gps, "GPGSV", 4 + 4 * i); // offsets 4, 8, 12, 16
+		elevation[i].begin(gps, "GPGSV", 5 + 4 * i); // offsets 5, 9, 13, 17
+		azimuth[i].begin(gps, "GPGSV", 6 + 4 * i); // offsets 6, 10, 14, 18
+		snr[i].begin(gps, "GPGSV", 7 + 4 * i); // offsets 7, 11, 15, 19
+	}
+
 	delay(2000);
-	drawMetricScreen();
-//	gpsdump(gps);
+	screen_mode = main_scr;
+//	screen_mode = sat_scr;
+
+	if (screen_mode == sat_scr) {
+		tft.fillScreen(ILI9341_BLACK);
+	} else {
+		drawMetricScreen();
+	}
 }
 
 void loop(void) {
-	// Time for next record.
-	//logTime += 1000UL * SAMPLE_INTERVAL_MS;
-
-	bool newdata = false;
 	unsigned long start = millis();
 
-	while (millis() - start < 1000) {
-		if (feedgps())
-			newdata = true;
-		if (obd_connected == true) {
+	while (((millis() - start) < 997)) {
+		feedgps();
+
+		if (obd_connected == true && screen_mode == main_scr) {
 			obd.read(PID_ENGINE_LOAD, load);
+			feedgps();
 			obd.read(PID_THROTTLE, throttle);
+			feedgps();
 			drawPercentBar(load, LOAD_POS, ILI9341_DGREEN, "load:");
+			feedgps();
 			drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
 		}
 	}
+
+	int button_state = digitalRead(BUTTON_PIN);
+	if (button_state == LOW)
+		if (screen_mode == main_scr) {
+			tft.fillScreen(ILI9341_BLACK);
+			screen_mode = sat_scr;
+		} else {
+			screen_mode = main_scr;
+			drawMetricScreen();
+		}
+
 	if (obd_connected == false)
 		obd_connected = obd.init();
 
@@ -175,21 +234,23 @@ void loop(void) {
 		rpm = 0;
 	}
 
-//	if (load > 100)
-//		load = 100;
-	drawPercentBar(load, LOAD_POS, ILI9341_DGREEN, "load:");
+	if (obd_connected == true && screen_mode == main_scr) {
+		drawPercentBar(load, LOAD_POS, ILI9341_DGREEN, "load:");
+		drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
+	}
 
-//	if (throttle > 100)
-//		throttle = 100;
-	drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
-
+	if (screen_mode == main_scr)
+		gpsdump(gps);
+	else if (screen_mode == sat_scr) {
+		drawSatScreen();
+	}
 //	gpsangle = 30;
 //	int x = 25 + sin(gpsangle) * 50;
 //	int y = 25 + cos(gpsangle) * 50;
 //	tft.drawLine(190,RPM_POS,x,y,ILI9341_YELLOW);
 
 	//if (newdata)
-	gpsdump(gps);
+
 	if (has_sd) {
 		logNewRow();
 		logIntData(rpm);
@@ -202,6 +263,14 @@ void loop(void) {
 		if (!file.sync() || file.getWriteError())
 			error("SD write error");
 	}
+}
+
+static bool feedgps() {
+	while (nss.available()) {
+		if (gps.encode(nss.read()))
+			return true;
+	}
+	return false;
 }
 
 void startOBD() {
@@ -274,6 +343,7 @@ void drawMetricScreen() {
 	tft.fillRoundRect(0, RPM_POS, 240, 50, 10, ILI9341_DBLUE);
 	tft.drawFastHLine(0, 25, 240, ILI9341_RED);
 	tft.drawFastHLine(0, 26, 240, ILI9341_RED);
+//	feedgps();
 }
 
 void drawPercentBar(int value, int y, int color, const char *label) {
@@ -286,6 +356,7 @@ void drawPercentBar(int value, int y, int color, const char *label) {
 	tft.print(label);
 	tft.setCursor(40, y + 1);
 	print_fixint(value, -1, 6);
+//	feedgps();
 }
 
 //------------------------------------------------------------------------------
@@ -294,10 +365,10 @@ void writeHeader() {
 	file.print(
 			"INDEX,RCR,DATE,TIME,VALID,LATITUDE,N/S,LONGITUDE,E/W,HEIGHT,SPEED,HEADING,DISTANCE,RPM,ENGINELOAD,THROTTLE,FRP,MAF,");
 	file.println();
+//	feedgps();
 }
 
 unsigned long testText() {
-
 	unsigned long start = micros();
 	tft.setTextColor(ILI9341_BLUE, ILI9341_BLACK);
 	tft.setTextSize(5);
@@ -319,14 +390,16 @@ unsigned long testText() {
 	return micros() - start;
 }
 
-static void gpsdump(TinyGPS &gps) {
+static void gpsdump(TinyGPSPlus &gps) {
 	float flat, flon;
 	unsigned long age, date, time, chars = 0;
 	unsigned short sentences = 0, failed = 0;
 //	static const float LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
 	static const float LONDON_LAT = 52.361440, LONDON_LON = 5.239020;
 
-	gps.f_get_position(&flat, &flon, &age);
+	flat = gps.location.lat();
+	flon = gps.location.lng();
+	age = gps.location.age();
 
 	logDateTime(gps);
 	logFloatData(flat, 5);
@@ -340,15 +413,16 @@ static void gpsdump(TinyGPS &gps) {
 	print_date(gps);
 
 	//float speed = gps.f_speed_kmph();
-	if (gps.f_speed_kmph() != TinyGPS::GPS_INVALID_F_SPEED) {
-		obdspeed = gps.f_speed_kmph();
+	if (gps.speed.isValid()) {
+		speed = gps.speed.kmph();
 		drawSourceIndicator(200, SPEED_POS + 2, "gps", ILI9341_YELLOW,
 				ILI9341_DRED);
 	} else {
-		if (obd_connected)
+		if (obd_connected) {
 			drawSourceIndicator(200, SPEED_POS + 2, "obd", ILI9341_YELLOW,
 					ILI9341_DRED);
-		else {
+			speed = obdspeed;
+		} else {
 			if (blink)
 				drawSourceIndicator(200, SPEED_POS + 2, "NC ", ILI9341_YELLOW,
 						ILI9341_DRED);
@@ -359,46 +433,47 @@ static void gpsdump(TinyGPS &gps) {
 	tft.setTextColor(ILI9341_WHITE, ILI9341_DRED);
 	tft.setCursor(10, SPEED_POS + ALIGN_Y);
 	tft.setTextSize(5);
-	print_float(obdspeed * 1.0, TinyGPS::GPS_INVALID_F_SPEED, 6, 1);
+	print_float(speed * 1.0, true, 6, 1);
 
 	tft.setCursor(10, RPM_POS + ALIGN_Y);
 	tft.setTextSize(5);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_DBLUE);
-	print_fixint(rpm, 9999, 6);
+	print_fixint(rpm, true, 6);
 
 	tft.setCursor(0, INFO_POS);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.setTextSize(2);
 	tft.print("Sats:      ");
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
-	print_int(gps.satellites(), TinyGPS::GPS_INVALID_SATELLITES, 2);
+	print_int(gps.satellites.value(), gps.satellites.isValid(), 3);
 
 	tft.setTextSize(2);
 	tft.setTextColor(ILI9341_WHITE);
 	tft.print("Altitude   ");
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
-	print_float(gps.f_altitude(), TinyGPS::GPS_INVALID_F_ALTITUDE, 8, 2);
-	logFloatData(gps.f_altitude(), 2);
+	print_float(gps.altitude.meters(), gps.altitude.isValid(), 8, 2);
+	logFloatData(gps.altitude.meters(), 2);
 
 	tft.setTextColor(ILI9341_WHITE);
 	tft.print("Angle:     ");
-	gpsangle = gps.f_course();
+	gpsangle = gps.course.deg();
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
-	print_float(gpsangle, TinyGPS::GPS_INVALID_F_ANGLE, 7, 2);
+	print_float(gpsangle, gps.course.isValid(), 7, 2);
 	logFloatData(gpsangle, 1);
 
 	tft.setTextColor(ILI9341_WHITE);
 	tft.print("Distance:  ");
-	float dist = TinyGPS::distance_between(flat, flon, LONDON_LAT, LONDON_LON)
+	float dist = (unsigned long) TinyGPSPlus::distanceBetween(
+			gps.location.lat(), gps.location.lng(), LONDON_LAT, LONDON_LON)
 			/ 1000;
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
-	print_float(dist, TinyGPS::GPS_INVALID_F_ANGLE, 3, 2);
+	print_float(dist, gps.location.isValid(), 5, 2);
 	logDistData((float) dist, 1);
 	tft.println();
 
 	drawSDCardFileMessage();
 
-	gps.stats(&chars, &sentences, &failed);
+	//gps.stats(&chars, &sentences, &failed);
 	tft.setCursor(ERROR_POS_X, ERROR_POS_Y);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.print("GPS errors:    ");
@@ -411,58 +486,55 @@ static void gpsdump(TinyGPS &gps) {
 void logNewRow() {
 	file.print(rowindex++);
 	file.print(",TDS,");
-	feedgps();
+//	feedgps();
 }
 
 void logFloatData(float data, int prec) {
 	file.print(data, prec);
 	file.print(",");
-	feedgps();
+//	feedgps();
 }
 void logDistData(float data, int prec) {
 	file.print(data, prec);
 	file.print("M,");
-	feedgps();
+//	feedgps();
 }
 void logIntData(int data) {
 	file.print(data);
 	file.print(",");
+//	feedgps();
 }
 
-void logDateTime(TinyGPS &gps) {
-	int year;
-	byte month, day, hour, minute, second, hundredths;
-	unsigned long age;
-	gps.crack_datetime(&year, &month, &day, &hour, &minute, &second,
-			&hundredths, &age);
-	if (age == TinyGPS::GPS_INVALID_AGE) {
-		day = month = year = hour = minute = second = 0;
+void logDateTime(TinyGPSPlus &gps) {
+	TinyGPSDate d = gps.date;
+	TinyGPSTime t = gps.time;
+	if (!d.isValid()) {
+		file.print("*******,");
+	} else {
+		char sz[32];
+		sprintf(sz, "%02d/%02d/%02d,", d.month(), d.day(), d.year());
+		file.print(sz);
 	}
-	char sz[32];
-	sprintf(sz, "%04d/%02d/%02d,%02d:%02d:%02d,", year, month, day, hour,
-			minute, second);
-	file.print(sz);
+	if (!t.isValid()) {
+		file.print("********,");
+	} else {
+		char sz[32];
+		sprintf(sz, "%02d:%02d:%02d,", t.hour(), t.minute(), t.second());
+		file.print(sz);
+	}
 	file.print("SPS,");
-	feedgps();
+//	feedgps();
 }
 
 void logEndRow() {
 	file.println();
-	feedgps();
+//	feedgps();
 }
 
-static bool feedgps() {
-	while (nss.available()) {
-		if (gps.encode(nss.read()))
-			return true;
-	}
-	return false;
-}
-
-static void print_int(unsigned int val, unsigned int invalid, int len) {
+static void print_int(unsigned int val, bool valid, int len) {
 //	clearLine(0);
 	char sz[32];
-	if (val == invalid)
+	if (!valid)
 		strcpy(sz, "*******");
 	else
 		sprintf(sz, "%d", val);
@@ -472,13 +544,13 @@ static void print_int(unsigned int val, unsigned int invalid, int len) {
 	if (len > 0)
 		sz[len - 1] = ' ';
 	tft.println(sz);
-	feedgps();
+//	feedgps();
 }
 
-static void print_fixint(unsigned long val, unsigned long invalid, int len) {
+static void print_fixint(unsigned long val, bool valid, int len) {
 //	clearLine(0);
 	char sz[32];
-	if (val == invalid)
+	if (!valid)
 		strcpy(sz, "*******");
 	else
 		sprintf(sz, "%5d", val);
@@ -488,13 +560,13 @@ static void print_fixint(unsigned long val, unsigned long invalid, int len) {
 	if (len > 0)
 		sz[len - 1] = ' ';
 	tft.println(sz);
-	feedgps();
+//	feedgps();
 }
 
-static void print_float(float val, float invalid, int len, int prec) {
+static void print_float(float val, bool valid, int len, int prec) {
 //	clearLine(0);
 	char sz[32];
-	if (val == invalid) {
+	if (!valid) {
 		strcpy(sz, "............");
 		sz[len] = 0;
 		if (len > 0)
@@ -514,27 +586,29 @@ static void print_float(float val, float invalid, int len, int prec) {
 	}
 
 	tft.println();
-	feedgps();
+//	feedgps();
 }
 
-static void print_date(TinyGPS &gps) {
-//	clearLine(0);
-	int year;
-	byte month, day, hour, minute, second, hundredths;
-	unsigned long age;
-	gps.crack_datetime(&year, &month, &day, &hour, &minute, &second,
-			&hundredths, &age);
-	if (age == TinyGPS::GPS_INVALID_AGE) {
-		tft.println("*******      *******");
-//		file.print(",");
-//		file.print("*******    *******");
+static void print_date(TinyGPSPlus &gps) {
+	TinyGPSDate d = gps.date;
+	TinyGPSTime t = gps.time;
+	if (!d.isValid()) {
+		tft.print("../../....");
 	} else {
 		char sz[32];
-		sprintf(sz, "%02d/%02d/%02d  %02d:%02d:%02d ", month, day, year, hour,
-				minute, second);
+		sprintf(sz, "%02d/%02d/%02d", d.month(), d.day(), d.year());
 		tft.print(sz);
 	}
-	feedgps();
+	tft.print("  ");
+	if (!t.isValid()) {
+		tft.print("..:..:..");
+	} else {
+		char sz[32];
+		sprintf(sz, "%02d:%02d:%02d", t.hour(), t.minute(), t.second());
+		tft.print(sz);
+	}
+
+//	feedgps();
 }
 
 static void print_str(const char *str, int len) {
@@ -543,7 +617,7 @@ static void print_str(const char *str, int len) {
 	int slen = strlen(str);
 	for (int i = 0; i < len; ++i)
 		tft.println(i < slen ? str[i] : ' ');
-	feedgps();
+//	feedgps();
 }
 
 void drawSourceIndicator(int xpos, int ypos, const char *str, int fg_color,
@@ -566,4 +640,44 @@ void drawSDCardFileMessage() {
 	}
 	tft.setCursor(0, ERROR_POS_Y);
 	tft.print(fileName);
+}
+
+void drawSatScreen() {
+	char sz[32];
+
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	if (totalGPGSVMessages.isUpdated()) {
+		for (int i = 0; i < 4; ++i) {
+			int no = atoi(satNumber[i].value());
+			if (no >= 1 && no <= MAX_SATELLITES) {
+				sats[no - 1].elevation = atoi(elevation[i].value());
+				sats[no - 1].azimuth = atoi(azimuth[i].value());
+				sats[no - 1].snr = atoi(snr[i].value());
+				sats[no - 1].active = true;
+			}
+		}
+	}
+
+	int totalMessages = atoi(totalGPGSVMessages.value());
+	int currentMessage = atoi(messageNumber.value());
+	if (totalMessages == currentMessage) {
+		tft.setTextSize(2);
+		tft.setCursor(155, 30);
+		tft.print(F("Sats="));
+		tft.println(gps.satellites.value());
+		tft.setCursor(0, 0);
+		tft.setTextSize(1);
+		for (int i = 0; i < MAX_SATELLITES; ++i) {
+			if (sats[i].active)
+				tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+			else
+				tft.setTextColor(ILI9341_BLUE, ILI9341_BLACK);
+			sprintf(sz, "%02d - El=%02d Az=%03d snr=%02d", i + 1,
+					sats[i].elevation, sats[i].azimuth, sats[i].snr);
+			tft.println(sz);
+			sats[i].active = false;
+			//}
+		}
+	}
+
 }
