@@ -91,6 +91,7 @@ mode screen_mode = sat_scr;
 bool obd_connected = false;
 bool has_sd = false;
 bool blink = true;
+volatile bool button_state = false;
 
 //For Satelites screen
 static const int MAX_SATELLITES = 40;
@@ -119,6 +120,10 @@ void error_P(const char* msg) {
 	sprintf(fileName, msg);
 }
 
+void button_pressed() {
+	button_state = true;
+}
+
 void setup() {
 
 	const uint8_t BASE_NAME_SIZE = sizeof(FILE_BASE_NAME) - 1;
@@ -128,6 +133,7 @@ void setup() {
 #endif
 	pinMode(BUTTON_PIN, INPUT);
 	digitalWrite(BUTTON_PIN, HIGH);
+	attachInterrupt(BUTTON_PIN, button_pressed, LOW);
 	// After setting up the button, setup debouncer
 //	debouncer.attach(BUTTON_PIN);
 //	debouncer.interval(5);
@@ -179,6 +185,10 @@ void setup() {
 		snr[i].begin(gps, "GPGSV", 7 + 4 * i); // offsets 7, 11, 15, 19
 	}
 
+	for (int i = 0; i < MAX_SATELLITES; ++i) {
+		sats[i].snr = 0;
+		sats[i].active = false;
+	}
 	delay(2000);
 	screen_mode = main_scr;
 //	screen_mode = sat_scr;
@@ -193,9 +203,14 @@ void setup() {
 void loop(void) {
 	unsigned long start = millis();
 
+	if (screen_mode == main_scr)
+		gpsdump(gps);
+	else if (screen_mode == sat_scr) {
+		drawSatScreen();
+	}
+
 	while (((millis() - start) < 997)) {
 		feedgps();
-
 		if (obd_connected == true && screen_mode == main_scr) {
 			obd.read(PID_ENGINE_LOAD, load);
 			feedgps();
@@ -205,17 +220,17 @@ void loop(void) {
 			feedgps();
 			drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
 		}
-	}
-
-	int button_state = digitalRead(BUTTON_PIN);
-	if (button_state == LOW)
-		if (screen_mode == main_scr) {
-			tft.fillScreen(ILI9341_BLACK);
-			screen_mode = sat_scr;
-		} else {
-			screen_mode = main_scr;
-			drawMetricScreen();
+		if (button_state) {
+			button_state = false;
+			if (screen_mode == main_scr) {
+				tft.fillScreen(ILI9341_BLACK);
+				screen_mode = sat_scr;
+			} else {
+				screen_mode = main_scr;
+				drawMetricScreen();
+			}
 		}
+	}
 
 	if (obd_connected == false)
 		obd_connected = obd.init();
@@ -239,11 +254,6 @@ void loop(void) {
 		drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
 	}
 
-	if (screen_mode == main_scr)
-		gpsdump(gps);
-	else if (screen_mode == sat_scr) {
-		drawSatScreen();
-	}
 //	gpsangle = 30;
 //	int x = 25 + sin(gpsangle) * 50;
 //	int y = 25 + cos(gpsangle) * 50;
@@ -307,7 +317,7 @@ bool openFile(char *fileName) {
 
 	// breadboards.  use SPI_FULL_SPEED for better performance.
 	if (!sd.begin(SD_CS, SPI_HALF_SPEED)) {
-		//sd.initErrorHalt();
+//sd.initErrorHalt();
 		tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
 		tft.println("failed");
 		sprintf(fileName, "No SD card");
@@ -644,7 +654,9 @@ void drawSDCardFileMessage() {
 
 void drawSatScreen() {
 	char sz[32];
-
+	int color = 0;
+	if (!gps.sentencesWithFix() > 1)
+		return;
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	if (totalGPGSVMessages.isUpdated()) {
 		for (int i = 0; i < 4; ++i) {
@@ -663,21 +675,38 @@ void drawSatScreen() {
 	if (totalMessages == currentMessage) {
 		tft.setTextSize(2);
 		tft.setCursor(155, 30);
-		tft.print(F("Sats="));
-		tft.println(gps.satellites.value());
+//		tft.print(F("Sats="));
+//		tft.println(gps.satellites.value());
 		tft.setCursor(0, 0);
 		tft.setTextSize(1);
 		for (int i = 0; i < MAX_SATELLITES; ++i) {
 			if (sats[i].active)
-				tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+				color = ILI9341_YELLOW;
 			else
-				tft.setTextColor(ILI9341_BLUE, ILI9341_BLACK);
-			sprintf(sz, "%02d - El=%02d Az=%03d snr=%02d", i + 1,
-					sats[i].elevation, sats[i].azimuth, sats[i].snr);
-			tft.println(sz);
+				color = ILI9341_BLUE;
+			drawBar(i, sats[i].snr, color);
+			tft.setTextColor(color, ILI9341_BLACK);
+//			sprintf(sz, "%02d - El=%02d Az=%03d snr=%02d", i + 1,
+//					sats[i].elevation, sats[i].azimuth, sats[i].snr);
+//			tft.println(sz);
 			sats[i].active = false;
-			//}
 		}
 	}
 
+}
+
+#define BARHEIGHT  	7
+#define STARTX 		150
+#define MAXBAR		240
+#define MAXSIGNAL   50.0
+#define BARLENGTH   (MAXBAR - STARTX)
+#define FACTOR 		(BARLENGTH / MAXSIGNAL)
+
+void drawBar(int i, float signal, int color) {
+//	if (signal == 0)
+//		return;
+	int y = i * 8;
+	int w = signal * FACTOR;
+	tft.fillRect(STARTX, y, w, BARHEIGHT, color);
+	tft.fillRect(STARTX + w, y, BARLENGTH - w, BARHEIGHT, ILI9341_BLACK);
 }
