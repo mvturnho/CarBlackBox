@@ -18,11 +18,12 @@
 #include <TinyGPS++.h>
 #include <SPI.h>
 #include <ILI9341_t3.h>
-//#include <Bounce2.h>
+#include <Bounce2.h>
 #include <Wire.h>
 #include <OBD.h>
 #include <SdFat.h>
 #include <EEPROM.h>
+#include <math.h>
 
 #define DEBUG
 
@@ -61,7 +62,7 @@ COBD obd;
 // Use hardware SPI (on Uno, #13, #12, #11) 
 ILI9341_t3 tft = ILI9341_t3(TFT_CS, TFT_DC, TFT_RST);
 // Instantiate a Bounce object
-//Bounce debouncer = Bounce(); 
+Bounce debouncer = Bounce();
 
 TinyGPSPlus gps;
 //HardwareSerial nss(GPS_RxPin, GPS_TxPin);
@@ -109,6 +110,7 @@ struct {
 	int elevation;
 	int azimuth;
 	int snr;
+	int run;
 } sats[MAX_SATELLITES];
 
 // Error messages stored in flash.
@@ -121,7 +123,9 @@ void error_P(const char* msg) {
 }
 
 void button_pressed() {
-	button_state = true;
+	debouncer.update();
+	if (debouncer.read() == LOW)
+		button_state = true;
 }
 
 void setup() {
@@ -135,8 +139,8 @@ void setup() {
 	digitalWrite(BUTTON_PIN, HIGH);
 	attachInterrupt(BUTTON_PIN, button_pressed, LOW);
 	// After setting up the button, setup debouncer
-//	debouncer.attach(BUTTON_PIN);
-//	debouncer.interval(5);
+	debouncer.attach(BUTTON_PIN);
+	debouncer.interval(5);
 	//initialize TFT display
 	tft.begin();
 	tft.fillScreen(ILI9341_BLACK);
@@ -158,9 +162,7 @@ void setup() {
 	writeHeader();
 	tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
 	tft.println("done");
-	// Start on a multiple of the sample interval.
-//	logTime = micros() / (1000UL * SAMPLE_INTERVAL_MS) + 1;
-//	logTime *= 1000UL * SAMPLE_INTERVAL_MS;
+
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.print("init gps Serial1     ... ");
 	nss.begin(9600);
@@ -171,12 +173,6 @@ void setup() {
 	tft.print("init obd Serial3     ");
 	startOBD();
 
-	for (int i = 0; i < 320; i++) {
-		int s = 20 * sin((long double) i / 10);
-		tft.drawPixel(i, 300 + (int) s, ILI9341_GREEN);
-		delay(5);
-	}
-
 	// Initialize all the uninitialized TinyGPSCustom objects
 	for (int i = 0; i < 4; ++i) {
 		satNumber[i].begin(gps, "GPGSV", 4 + 4 * i); // offsets 4, 8, 12, 16
@@ -186,12 +182,13 @@ void setup() {
 	}
 
 	for (int i = 0; i < MAX_SATELLITES; ++i) {
+		sats[i].run = 0;
 		sats[i].snr = 0;
 		sats[i].active = false;
 	}
 	delay(2000);
-	screen_mode = main_scr;
-//	screen_mode = sat_scr;
+//	screen_mode = main_scr;
+	screen_mode = sat_scr;
 
 	if (screen_mode == sat_scr) {
 		tft.fillScreen(ILI9341_BLACK);
@@ -253,13 +250,6 @@ void loop(void) {
 		drawPercentBar(load, LOAD_POS, ILI9341_DGREEN, "load:");
 		drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
 	}
-
-//	gpsangle = 30;
-//	int x = 25 + sin(gpsangle) * 50;
-//	int y = 25 + cos(gpsangle) * 50;
-//	tft.drawLine(190,RPM_POS,x,y,ILI9341_YELLOW);
-
-	//if (newdata)
 
 	if (has_sd) {
 		logNewRow();
@@ -652,6 +642,15 @@ void drawSDCardFileMessage() {
 	tft.print(fileName);
 }
 
+#define COLD  	10
+#define FROOZEN  20
+#define CENTER_X 75
+#define CENTER_Y 90
+#define MAX_R	70
+#define TOP  CENTER_Y - MAX_R
+#define SIDE CENTER_X - MAX_R
+#define WIDTH (2*MAX_R)+SIDE
+#define HEIGHT (2*MAX_R)+TOP
 void drawSatScreen() {
 	char sz[32];
 	int color = 0;
@@ -669,44 +668,98 @@ void drawSatScreen() {
 			}
 		}
 	}
+	tft.setTextSize(2);
+	tft.setCursor(0, 175);
+	tft.setTextColor(ILI9341_WHITE);
+	tft.print(F("Sats  "));
+	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+	print_int(gps.satellites.value(), gps.satellites.isValid(), 3);
+	tft.setTextColor(ILI9341_WHITE);
+	tft.print("Alt   ");
+	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+	print_float(gps.altitude.meters(), gps.altitude.isValid(), 5, 2);
+	tft.setTextColor(ILI9341_WHITE);
+	tft.print("Angle:");
+	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+	print_float(gps.course.deg(), gps.course.isValid(), 5, 2);
+	tft.setTextColor(ILI9341_WHITE);
+	tft.print("Speed:");
+	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+	print_float(gps.speed.kmph(), gps.speed.isValid(), 5, 2);
+	tft.setTextColor(ILI9341_WHITE);
+	tft.print("HDOP :");
+	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+	print_float(gps.hdop.value(), gps.hdop.isValid(), 5, 2);
+
+	tft.drawLine(CENTER_X, TOP, CENTER_X, HEIGHT, ILI9341_WHITE);
+	tft.drawLine(SIDE, CENTER_Y, WIDTH, CENTER_Y, ILI9341_WHITE);
+	tft.drawCircle(CENTER_X, CENTER_Y, MAX_R, ILI9341_GREEN);
+	tft.drawCircle(CENTER_X, CENTER_Y, MAX_R / 2, ILI9341_GREEN);
+	tft.drawCircle(CENTER_X, CENTER_Y, MAX_R * 0.75, ILI9341_GREEN);
 
 	int totalMessages = atoi(totalGPGSVMessages.value());
 	int currentMessage = atoi(messageNumber.value());
 	if (totalMessages == currentMessage) {
-		tft.setTextSize(2);
-		tft.setCursor(155, 30);
-//		tft.print(F("Sats="));
-//		tft.println(gps.satellites.value());
+
 		tft.setCursor(0, 0);
 		tft.setTextSize(1);
 		for (int i = 0; i < MAX_SATELLITES; ++i) {
-			if (sats[i].active)
+			if (sats[i].active) {
 				color = ILI9341_YELLOW;
-			else
+				sats[i].run = 0;
+			} else {
+				color = ILI9341_RED;
+				sats[i].run++;
+			}
+
+			if (sats[i].run > COLD && sats[i].run < FROOZEN)
 				color = ILI9341_BLUE;
+			else if (sats[i].run == FROOZEN)
+				color = ILI9341_BLACK;
+			else if (sats[i].run > FROOZEN)
+				continue;
 			drawBar(i, sats[i].snr, color);
-			tft.setTextColor(color, ILI9341_BLACK);
+//			drawBar(i, 35, color);
+			if (sats[i].snr > 0)
+				drawDot(i, sats[i].azimuth, sats[i].elevation, color);
+//			drawDot(i,130,12,color);
+//			drawDot(i,20,25,color);
+//			drawDot(i,270,50,color);
+//			tft.setTextColor(color, ILI9341_BLACK);
 //			sprintf(sz, "%02d - El=%02d Az=%03d snr=%02d", i + 1,
 //					sats[i].elevation, sats[i].azimuth, sats[i].snr);
 //			tft.println(sz);
 			sats[i].active = false;
 		}
 	}
-
 }
 
 #define BARHEIGHT  	7
-#define STARTX 		150
+#define STARTX 		155
 #define MAXBAR		240
 #define MAXSIGNAL   50.0
 #define BARLENGTH   (MAXBAR - STARTX)
 #define FACTOR 		(BARLENGTH / MAXSIGNAL)
 
 void drawBar(int i, float signal, int color) {
-//	if (signal == 0)
-//		return;
 	int y = i * 8;
 	int w = signal * FACTOR;
 	tft.fillRect(STARTX, y, w, BARHEIGHT, color);
 	tft.fillRect(STARTX + w, y, BARLENGTH - w, BARHEIGHT, ILI9341_BLACK);
+	tft.setTextColor(ILI9341_WHITE);
+	tft.setCursor(MAXBAR - 14, y);
+	tft.setTextSize(1);
+	tft.print(i + 1);
 }
+
+void drawDot(int i, float angle, float elevation, int color) {
+	int fact = (elevation / 90) * MAX_R;
+	int x = fact * cos(radians(angle));
+	int y = fact * sin(radians(angle));
+	tft.fillCircle(CENTER_X + x, CENTER_Y + y, 3, color);
+//	tft.setTextColor(color);
+//	tft.setTextSize(1);
+//	tft.setCursor(CENTER_X + x + 2.5, CENTER_Y + y + 3.5);
+//	tft.print(i + 1);
+}
+
