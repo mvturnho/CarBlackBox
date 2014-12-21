@@ -671,14 +671,29 @@ void drawSatData() {
 		}
 	}
 
+	tft.drawCircle(40, 200, 30, ILI9341_GREEN);
+//	rotatePoint(gps.course.deg(), &sx, &sy, CENTER_X, CENTER_Y);
+//	tft.drawLine(sx, sy, CENTER_X, CENTER_Y, ILI9341_WHITE);
 	tft.drawLine(CENTER_X, TOP, CENTER_X, HEIGHT, ILI9341_WHITE);
 	tft.drawLine(SIDE, CENTER_Y, WIDTH, CENTER_Y, ILI9341_WHITE);
 	tft.drawCircle(CENTER_X, CENTER_Y, MAX_R, ILI9341_GREEN);
 	tft.drawCircle(CENTER_X, CENTER_Y, MAX_R / 2, ILI9341_GREEN);
 	tft.drawCircle(CENTER_X, CENTER_Y, MAX_R * 0.75, ILI9341_GREEN);
 	if (gps.course.isValid()) {
-		drawOpenDot(gpsangle - 90, 98, ILI9341_BLACK);
-		drawOpenDot(gps.course.deg() - 90, 98, ILI9341_WHITE);
+		drawOpenDot(gpsangle, 98, ILI9341_BLACK);
+		drawOpenDot(gps.course.deg(), 98, ILI9341_WHITE);
+
+		int sx = 40;
+		int sy = 200 - 30;
+		rotatePoint(gpsangle, &sx, &sy, 40, 200);
+		tft.drawLine(sx, sy, 40, 200, ILI9341_BLACK);
+		
+		sx = 40;
+		sy = 200 - 30;
+		rotatePoint(gps.course.deg()-90, &sx, &sy, 40, 200);
+		tft.drawLine(sx, sy, 40, 200, ILI9341_WHITE);
+		rotatePoint(180, &sx, &sy, 40, 200);
+		tft.drawLine(sx, sy, 40, 200, ILI9341_RED);
 		gpsangle = gps.course.deg();
 	}
 
@@ -772,9 +787,9 @@ void drawDot(int i, int color) {
 	tft.setCursor(sats[i].old_x, sats[i].old_y + 4);
 	tft.print(i + 1);
 	//draw the new
-	int fact = ((float)sats[i].elevation / 90) * MAX_R;
-	int x = fact * cos(radians(sats[i].azimuth));
-	int y = fact * sin(radians(sats[i].azimuth));
+	int fact = ((float) sats[i].elevation / 90) * MAX_R;
+	int x = fact * cos(radians(sats[i].azimuth) - 90);
+	int y = fact * sin(radians(sats[i].azimuth) - 90);
 	tft.fillCircle(CENTER_X + x, CENTER_Y + y, 3, ILI9341_GRAY2);
 	tft.setTextColor(color);
 	tft.setTextSize(1);
@@ -786,10 +801,20 @@ void drawDot(int i, int color) {
 
 void drawOpenDot(float angle, float elevation, int color) {
 	int fact = (elevation / 90) * MAX_R;
-	int x = fact * cos(radians(angle));
-	int y = fact * sin(radians(angle));
+	int x = fact * cos(radians(angle) - 90);
+	int y = fact * sin(radians(angle) - 90);
 	tft.drawCircle(CENTER_X + x, CENTER_Y + y, 3, color);
 	tft.drawCircle(CENTER_X + x, CENTER_Y + y, 2, color);
+}
+
+void rotatePoint(float a, int *x, int *y, int xm, int ym) {
+	// Subtract midpoints, so that midpoint is translated to origin
+	// and add it in the end again
+	int xr = (*x - xm) * cos(a) - (*y - ym) * sin(a) + xm;
+	int yr = (*x - xm) * sin(a) + (*y - ym) * cos(a) + ym;
+	//result values
+	*x = xr;
+	*y = yr;
 }
 
 void drawSatScreen() {
