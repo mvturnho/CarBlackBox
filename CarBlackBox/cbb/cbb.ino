@@ -43,7 +43,6 @@
 
 //Pin Definitions
 #define nss Serial3
-//SoftwareSerial nss(GPS_RxPin, GPS_TxPin);
 
 // Use hardware SPI (on Uno, #13, #12, #11) 
 ILI9341_t3 tft = ILI9341_t3(TFT_CS, TFT_DC, TFT_RST);
@@ -55,8 +54,6 @@ TinyGPSPlus gps;
 SdFat sd;
 // Log file.
 SdFile file;
-// Time in micros for next data record.
-//uint32_t logTime;
 
 float gpsangle = -1.0;
 char fileName[14];
@@ -77,16 +74,6 @@ TinyGPSCustom satNumber[4]; // to be initialized later
 TinyGPSCustom elevation[4];
 TinyGPSCustom azimuth[4];
 TinyGPSCustom snr[4];
-
-//struct satelite {
-//	bool active;
-//	int elevation;
-//	int azimuth;
-//	int snr;
-//	int run;
-//	int old_x;
-//	int old_y;
-//} sats[MAX_SATELLITES];
 
 // Error messages stored in flash.
 #define error(msg) error_P(PSTR(msg))
@@ -146,13 +133,14 @@ void loop(void) {
 		if (obd_connected == true && screen_mode == main_scr) {
 			readRealTimeObd();
 			drawRealTimeData();
-		} else if (screen_mode == sat_scr && gps.course.isValid() && gpsangle != gps.course.deg()) {
-			drawOpenDot(gpsangle, 270, 98, ILI9341_BLACK);
+		}
+		//else if (screen_mode == sat_scr && gps.course.isValid() && gpsangle != gps.course.deg()) {
+//			drawOpenDot(gpsangle, 270, 98, ILI9341_BLACK);
 //			gpsangle += 1;
 //			drawOpenDot(gpsangle, 270, 98, ILI9341_WHITE);
-			drawOpenDot(gps.course.deg(), 270, 98, ILI9341_WHITE);
-			gpsangle = gps.course.deg();
-		}
+//			drawOpenDot(gps.course.deg(), 270, 98, ILI9341_WHITE);
+//			gpsangle = gps.course.deg();
+		//}
 		switchScreen();
 	}
 
@@ -255,7 +243,6 @@ void drawMetricScreen() {
 	tft.fillRoundRect(0, RPM_POS, 240, 50, 10, ILI9341_DBLUE);
 	tft.drawFastHLine(0, 25, 240, ILI9341_RED);
 	tft.drawFastHLine(0, 26, 240, ILI9341_RED);
-//	feedgps();
 }
 
 //------------------------------------------------------------------------------
@@ -264,7 +251,6 @@ void writeHeader() {
 	file.print(
 			"INDEX,RCR,DATE,TIME,VALID,LATITUDE,N/S,LONGITUDE,E/W,HEIGHT,SPEED,HEADING,DISTANCE,RPM,ENGINELOAD,THROTTLE,FRP,MAF,");
 	file.println();
-//	feedgps();
 }
 
 unsigned long bootText() {
@@ -311,7 +297,6 @@ static void drawMetricData(TinyGPSPlus &gps) {
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
 	print_date(gps);
 
-	//float speed = gps.f_speed_kmph();
 	if (gps.speed.isValid()) {
 		speed = gps.speed.kmph();
 		drawSourceIndicator(200, SPEED_POS + 2, "gps", ILI9341_YELLOW,
@@ -376,10 +361,10 @@ static void drawMetricData(TinyGPSPlus &gps) {
 	drawSDCardFileMessage();
 
 	//gps.stats(&chars, &sentences, &failed);
-	tft.setCursor(ERROR_POS_X, ERROR_POS_Y);
-	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-	tft.print("GPS errors:    ");
-	print_int(failed, 0xFFFFFFFF, 6);
+//	tft.setCursor(ERROR_POS_X, ERROR_POS_Y);
+//	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+//	tft.print("GPS errors:    ");
+//	print_int(failed, 0xFFFFFFFF, 6);
 
 	blink = blink ^ 1;
 
@@ -403,9 +388,6 @@ void drawSatData() {
 		}
 	}
 
-//	tft.drawCircle(40, 200, 30, ILI9341_GREEN);
-//	rotatePoint(gps.course.deg(), &sx, &sy, CENTER_X, CENTER_Y);
-//	tft.drawLine(sx, sy, CENTER_X, CENTER_Y, ILI9341_WHITE);
 	tft.drawLine(CENTER_X, TOP, CENTER_X, HEIGHT, ILI9341_WHITE);
 	tft.drawLine(SIDE, CENTER_Y, WIDTH, CENTER_Y, ILI9341_WHITE);
 	tft.drawCircle(CENTER_X, CENTER_Y, MAX_R + 9, ILI9341_GRAY1);
@@ -414,24 +396,24 @@ void drawSatData() {
 	tft.drawCircle(CENTER_X, CENTER_Y, MAX_R * 0.75, ILI9341_GREEN);
 
 	if (gps.course.isValid()) {
-//		drawOpenDot(gpsangle, 270, 98, ILI9341_BLACK,ILI9341_BLACK);
-//		drawOpenDot(gps.course.deg(), 270, 98, ILI9341_WHITE, ILI9341_RED);
-//
+		drawOpenDot(gpsangle, 270, 98, ILI9341_BLACK, ILI9341_BLACK);
+		drawOpenDot(gps.course.deg(), 270, 98, ILI9341_WHITE, ILI9341_RED);
+
 //// DEBUG
 ////		drawOpenDot(gpsangle, 270, 98, ILI9341_BLACK);
 ////		gpsangle+=10;
 ////		drawOpenDot(gpsangle, 270, 98, ILI9341_WHITE);
-//
+
 		tft.setTextSize(2);
 		tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
 		tft.setCursor(0, 200);
-		tft.print(gps.course.deg());
+		tft.print(gps.course.deg()); tft.print(" - ");
 		tft.print(gps.cardinal(gps.course.deg()));
 //// DEBUG
 ////		tft.print(gpsangle);
 ////		tft.print(gps.cardinal(gpsangle));
-//
-//		gpsangle = gps.course.deg();
+
+		gpsangle = gps.course.deg();
 	}
 
 	tft.setTextSize(2);
@@ -472,19 +454,11 @@ void drawSatData() {
 				color = ILI9341_BLACK;
 			else if (sats[i].run > FROOZEN)
 				continue;
-//			drawBar(i, 35, color);
 			if (sats[i].snr > 0) {
 				drawBar(i, color);
 				if (gps.satellites.value() > 0)
 					drawDot(i, 270, color);
 			}
-//			drawDot(i,130,12,color);
-//			drawDot(i,20,25,color);
-//			drawDot(i,270,50,color);
-//			tft.setTextColor(color, ILI9341_BLACK);
-//			sprintf(sz, "%02d - El=%02d Az=%03d snr=%02d", i + 1,
-//					sats[i].elevation, sats[i].azimuth, sats[i].snr);
-//			tft.println(sz);
 			sats[i].active = false;
 		}
 	}

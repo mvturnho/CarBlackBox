@@ -195,9 +195,9 @@ void drawDot(int i, int offset, int color) {
 	sats[i].old_y = CENTER_Y + y;
 }
 
-void drawOpenDot(float angle, int offset, float elevation, int color,
+void drawOpenDot(float angle, int offset, float r, int color,
 		int c_color = -1) {
-	int fact = (elevation / 90) * MAX_R;
+	int fact = (r / 90) * MAX_R;
 	int y = fact * sin(radians(angle + offset));
 	int x = fact * cos(radians(angle + offset));
 	tft.drawCircle(CENTER_X + x, CENTER_Y + y, 3, color);
@@ -205,7 +205,6 @@ void drawOpenDot(float angle, int offset, float elevation, int color,
 		tft.fillCircle(CENTER_X + x, CENTER_Y + y, 2, c_color);
 	else
 		tft.drawCircle(CENTER_X + x, CENTER_Y + y, 2, color);
-
 }
 
 void drawBar(int i, int color) {
