@@ -404,10 +404,10 @@ void drawSatData() {
 ////		gpsangle+=10;
 ////		drawOpenDot(gpsangle, 270, 98, ILI9341_WHITE);
 
-		tft.setTextSize(2);
+		tft.setTextSize(4);
 		tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
-		tft.setCursor(0, 200);
-		tft.print(gps.course.deg()); tft.print(" - ");
+		tft.setCursor(20, 180);
+//		tft.print(gps.course.deg()); tft.print(" - ");
 		tft.print(gps.cardinal(gps.course.deg()));
 //// DEBUG
 ////		tft.print(gpsangle);
