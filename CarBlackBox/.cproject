@@ -16,9 +16,13 @@
 					<folderInfo id="it.baeyens.arduino.core.configuration.release.364182706." name="/" resourcePath="">
 						<toolChain id="it.baeyens.arduino.core.toolChain.release.821009590" name="Arduino Toolchain" superClass="it.baeyens.arduino.core.toolChain.release">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="it.baeyens.arduino.targetplatform.271335584" name="Arduino Target" osList="all" superClass="it.baeyens.arduino.targetplatform"/>
-							<builder buildPath="${workspace_loc:/CarBlackBox}/Release" id="it.baeyens.arduino.sketch.builder.712041371" managedBuildOn="true" name="Arduino sketch builder.Release" superClass="it.baeyens.arduino.sketch.builder"/>
-							<tool id="it.baeyens.arduino.tool.sketch.compiler.cpp.1067275293" name="Arduino C++ Compiler" superClass="it.baeyens.arduino.tool.sketch.compiler.cpp"/>
-							<tool id="it.baeyens.arduino.tool.compiler.c.1341137647" name="Arduino C Compiler" superClass="it.baeyens.arduino.tool.compiler.c"/>
+							<builder buildPath="${workspace_loc:/CarBlackBox}/Release" id="it.baeyens.arduino.sketch.builder.712041371" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Arduino sketch builder" superClass="it.baeyens.arduino.sketch.builder"/>
+							<tool id="it.baeyens.arduino.tool.sketch.compiler.cpp.1067275293" name="Arduino C++ Compiler" superClass="it.baeyens.arduino.tool.sketch.compiler.cpp">
+								<inputType id="it.baeyens.arduino.compiler.cpp.sketch.input.1059517668" name="CPP source files" superClass="it.baeyens.arduino.compiler.cpp.sketch.input"/>
+							</tool>
+							<tool id="it.baeyens.arduino.tool.compiler.c.1341137647" name="Arduino C Compiler" superClass="it.baeyens.arduino.tool.compiler.c">
+								<inputType id="it.baeyens.arduino.compiler.c.sketch.input.1261206882" name="C Source Files" superClass="it.baeyens.arduino.compiler.c.sketch.input"/>
+							</tool>
 							<tool id="it.baeyens.arduino.tool.ar.1860944383" name="Arduino archiver" superClass="it.baeyens.arduino.tool.ar"/>
 							<tool id="it.baeyens.arduino.tool.combine.1250126168" name="Arduino combiner" superClass="it.baeyens.arduino.tool.combine"/>
 							<tool id="it.baeyens.arduino.tool.objcopy.eep.935604377" name="Arduino tool Create eeprom" superClass="it.baeyens.arduino.tool.objcopy.eep"/>
@@ -38,4 +42,11 @@
 		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
+	<storageModule moduleId="refreshScope" versionNumber="2">
+		<configuration configurationName="Release">
+			<resource resourceType="PROJECT" workspacePath="/CarBlackBox"/>
+		</configuration>
+	</storageModule>
+	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
+	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 </cproject>

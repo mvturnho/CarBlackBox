@@ -51,7 +51,7 @@ def obdRevConvert_04(val):
 load = 0;
 thr = 0;
 speed = 0;
-rpm = 0;
+rpm = 878;
 
 Received_str = "";
 while 1:
@@ -110,7 +110,7 @@ while 1:
         ser.write(">")
         load = load + 1;
     elif (Received_str == "0105"):  # Coolant temperature
-        ser.write("\r41 05 D4\r")
+        ser.write("\r41 05 80\r")
         ser.write(">")
     elif (Received_str == "010A"):  # Fuel pressure
         print "# Fuel pressure"
