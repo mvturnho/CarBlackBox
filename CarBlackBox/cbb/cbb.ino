@@ -41,8 +41,8 @@
 
 #define BUTTON_PIN 5
 
-//Pin Definitions
 #define nss Serial3
+#define bts Serial2
 
 // Use hardware SPI (on Uno, #13, #12, #11) 
 ILI9341_t3 tft = ILI9341_t3(TFT_CS, TFT_DC, TFT_RST);
@@ -58,12 +58,22 @@ SdFile file;
 float gpsangle = -1.0;
 char fileName[14];
 
+enum {
+	mainscreen, satscreen,
+} commands;
+char buf[20];
+int vars[4];
+int varcount = 0;
+int command = -1;
+int bc = 0;
+
 typedef enum {
 	main_scr, sat_scr
 } mode;
 mode screen_mode = sat_scr;
 
 bool has_sd = false;
+bool has_bt = false;
 bool blink = true;
 volatile bool button_state = false;
 
@@ -112,6 +122,10 @@ void setup() {
 
 	initSystem();
 
+#if defined(DEBUG)
+	delay(2000);
+#endif
+
 	delay(2000);
 //	screen_mode = main_scr;
 	screen_mode = sat_scr;
@@ -130,6 +144,7 @@ void loop(void) {
 
 	while (((millis() - start) < 997)) {
 		feedgps();
+		process_serial();
 		if (obd_connected == true && screen_mode == main_scr) {
 			readRealTimeObd();
 			drawRealTimeData();
@@ -147,6 +162,7 @@ void loop(void) {
 	updateObd();
 
 	logData();
+
 }
 
 void initSystem() {
@@ -169,6 +185,41 @@ void initSystem() {
 	nss.begin(9600);
 	tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
 	tft.println("done");
+
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	tft.print("set BT SPEED         ... ");
+	bts.begin(9600);
+	delay(100);
+	bts.print("AT+BAUD8");
+	bts.readBytesUntil('q', buf, 8);
+	bts.end();
+	delay(100);
+	bts.begin(115200);
+	delay(100);
+	bts.print("AT+VERSION");
+	bts.readBytesUntil('q', buf, 20);
+	tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+	tft.println(buf);
+
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	tft.print("set BT PIN           ... ");
+	bts.print("AT+PIN1966");
+	bts.readBytesUntil('q', buf, 20);
+	tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+	if (buf == "OKsetPIN")
+		tft.println(buf);
+	else
+		tft.println(buf);
+	has_bt = true;
+
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	tft.print("set BT NAME          ... ");
+	bts.print("AT+NAMECBB");
+	bts.readBytesUntil('q', buf, 20);
+	tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+	tft.println(buf);
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+
 	rowindex = 1;
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.print("init obd Serial3     ");
@@ -212,6 +263,19 @@ void switchScreen() {
 	}
 }
 
+void setScreen(int screen) {
+	if (screen_mode != screen) {
+		if (screen == sat_scr) {
+			drawSatScreen();
+			screen_mode = sat_scr;
+			gpsangle = -1;
+		} else if (screen == main_scr) {
+			screen_mode = main_scr;
+			drawMetricScreen();
+		}
+	}
+}
+
 void logData() {
 	if (has_sd) {
 		logNewRow();
@@ -224,6 +288,7 @@ void logData() {
 		// Force data to SD and update the directory entry to avoid data loss.
 		if (!file.sync() || file.getWriteError())
 			error("SD write error");
+
 	}
 }
 
@@ -464,3 +529,78 @@ void drawSatData() {
 	}
 }
 
+void process_serial() {
+	int incomingByte;
+	if (bts.available() > 0) {
+		incomingByte = bts.read();
+		if (incomingByte == '\n' || incomingByte == '\r') {
+			//Serial.println("foudn newline");
+			clearbuf();
+		} else if (incomingByte == ' ') {
+			getcommand();
+			clearbuf();
+		} else if (incomingByte == ',') {
+			storevar();
+			varcount++;
+			clearbuf();
+		} else {
+			if (incomingByte == '.') {
+				execute();
+				clearbuf();
+				varcount = 0;
+			} else {
+				buf[bc] = incomingByte;
+				bc++;
+			}
+		}
+	}
+}
+
+//store the values in variable array
+void storevar() {
+	//  debug("var: ",buf);
+	//  Serial.print("var : ");
+	//  Serial.println(buf);
+	int val = atoi(buf);
+	vars[varcount] = val;
+}
+
+//store command code 
+void getcommand() {
+	//Serial.print("command : ");
+	//Serial.println(buf);
+
+	if (strcmp(buf, "m") == 0) {
+		command = mainscreen;
+	} else if (strcmp(buf, "s") == 0) {
+		command = satscreen;
+	} else {
+		//Serial.print("invalid command: ");
+		//Serial.println(buf);
+		command = -1;
+		bts.println("?");
+	}
+}
+
+//execute the command by setting motor values
+void execute() {
+	long val = atol(buf);
+
+	switch (command) {
+	case mainscreen:
+		setScreen(main_scr);
+		bts.println("switch MAIN screen");
+		break;
+	case satscreen:
+		setScreen(sat_scr);
+		bts.println("switch SAT screen");
+		break;
+	}
+}
+
+void clearbuf() {
+	for (int i = 0; i < 11; i++) {
+		buf[i] = 0;
+	}
+	bc = 0;
+}

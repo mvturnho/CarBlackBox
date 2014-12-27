@@ -15,7 +15,7 @@ System::System() {
 #endif
 	pinMode(BUTTON_PIN, INPUT);
 	digitalWrite(BUTTON_PIN, HIGH);
-	attachInterrupt(BUTTON_PIN, button_pressed, LOW);
+//	attachInterrupt(BUTTON_PIN, button_pressed, LOW);
 	// After setting up the button, setup debouncer
 	debouncer.attach(BUTTON_PIN);
 	debouncer.interval(5);
@@ -23,5 +23,11 @@ System::System() {
 
 System::~System() {
 	// TODO Auto-generated destructor stub
+}
+
+void System::button_pressed() {
+	debouncer.update();
+	if (debouncer.read() == LOW)
+		button_state = true;
 }
 

@@ -9,9 +9,9 @@
 #define SYSTEM_H_
 
 #include <Bounce2.h>
-#include "Diaplay.h"
+#include "Display.h"
 #include "GPS.h"
-#include "OBD.h"
+//#include "OBD.h"
 #include "Log.h"
 
 class System {
@@ -22,6 +22,7 @@ public:
 
 	System();
 	virtual ~System();
+	void button_pressed();
 };
 
 #endif /* SYSTEM_H_ */
