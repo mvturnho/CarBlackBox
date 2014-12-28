@@ -39,7 +39,7 @@ bool openFile(char *fileName) {
 		return false;
 	}
 	tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
-	tft.println("done");
+	tft.println(fileName);
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	if (sd.exists(fileName)) {
 		tft.print("overwrite file       ... ");

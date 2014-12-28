@@ -92,6 +92,10 @@ while 1:
     elif (Received_str == "ATSP0"):
         ser.write("\rOK\r")
         ser.write(">")
+    elif (Received_str == "ATRV"):
+        ser.write("\r1.2\r")
+        ser.write("OK\r")
+        ser.write(">")   
     elif (Received_str == "0100"):
         ser.write("\r41 00 98 3B A0 11\r")
         ser.write(">")

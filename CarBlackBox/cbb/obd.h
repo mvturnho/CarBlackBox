@@ -34,7 +34,7 @@ void startOBD() {
 	}
 	if (obd_connected) {
 		tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
-		tft.println(" done");
+		tft.printf(" %s\n",obd.getVersion());
 	} else {
 		tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
 		tft.println(" failed");

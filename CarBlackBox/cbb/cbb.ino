@@ -29,7 +29,7 @@
 #include "logging.h"
 #include "obd.h"
 
-#define DEBUG
+//#define DEBUG
 
 // For the Adafruit shield, these are the default.
 #define TFT_DC     15
@@ -59,7 +59,7 @@ float gpsangle = -1.0;
 char fileName[14];
 
 enum {
-	mainscreen, satscreen,
+	mainscreen, satscreen, nextscreen, get,
 } commands;
 char buf[20];
 int vars[4];
@@ -574,6 +574,10 @@ void getcommand() {
 		command = mainscreen;
 	} else if (strcmp(buf, "s") == 0) {
 		command = satscreen;
+	} else if (strcmp(buf, "t") == 0) {
+		command = nextscreen;
+	} else if (strcmp(buf, "01") == 0) {
+		command = get;
 	} else {
 		//Serial.print("invalid command: ");
 		//Serial.println(buf);
@@ -594,6 +598,20 @@ void execute() {
 	case satscreen:
 		setScreen(sat_scr);
 		bts.println("switch SAT screen");
+		break;
+	case nextscreen:
+		button_state = true;
+		bts.println("switch NEXT screen");
+		break;
+	case get: //get obd values
+		if (val == 5) //05 = temp
+			bts.println(obdspeed);
+		else if (val == 12) //0c = rpm
+			bts.println(rpm);
+		else if (val == 13) //0d = speed
+			bts.println(rpm);
+		else if (val == 4) //04 = load
+			bts.println(rpm);
 		break;
 	}
 }
