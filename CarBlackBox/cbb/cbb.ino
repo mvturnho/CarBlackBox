@@ -13,8 +13,9 @@
  MIT license, all text above must be included in any redistribution
  ****************************************************/
 
-//#include <HardwareSerial.h>
-//#include <SoftwareSerial.h>
+#include <stdio.h>
+#include <string.h>
+
 #include <TinyGPS++.h>
 #include <SPI.h>
 #include <ILI9341_t3.h>
@@ -107,7 +108,6 @@ void setup() {
 #endif
 	pinMode(BUTTON_PIN, INPUT);
 	digitalWrite(BUTTON_PIN, HIGH);
-	attachInterrupt(BUTTON_PIN, button_pressed, LOW);
 	// After setting up the button, setup debouncer
 	debouncer.attach(BUTTON_PIN);
 	debouncer.interval(5);
@@ -117,6 +117,11 @@ void setup() {
 	tft.fillScreen(ILI9341_BLACK);
 	bootText();
 	delay(200);
+
+	if (!digitalRead(BUTTON_PIN)) {
+		resetSystem();
+		delay(200);
+	}
 
 	tft.setRotation(0);	// Initialize the SD card at SPI_HALF_SPEED to avoid bus errors with
 
@@ -135,6 +140,8 @@ void setup() {
 	} else {
 		drawMetricScreen();
 	}
+
+	attachInterrupt(BUTTON_PIN, button_pressed, LOW);
 }
 
 void loop(void) {
@@ -145,8 +152,9 @@ void loop(void) {
 	while (((millis() - start) < 997)) {
 		feedgps();
 		process_serial();
-		if (obd_connected == true && screen_mode == main_scr) {
+		if (obd_connected && screen_mode == main_scr) {
 			readRealTimeObd();
+			feedgps();
 			drawRealTimeData();
 		}
 		//else if (screen_mode == sat_scr && gps.course.isValid() && gpsangle != gps.course.deg()) {
@@ -156,13 +164,15 @@ void loop(void) {
 //			drawOpenDot(gps.course.deg(), 270, 98, ILI9341_WHITE);
 //			gpsangle = gps.course.deg();
 		//}
+		feedgps();
 		switchScreen();
 	}
-
+	readRealTimeObd();
+	feedgps();
 	updateObd();
-
+	feedgps();
 	logData();
-
+	feedgps();
 }
 
 void initSystem() {
@@ -176,9 +186,14 @@ void initSystem() {
 	// Write data header.
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.print("init new log file    ... ");
-	writeHeader();
-	tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
-	tft.println("done");
+	if (has_sd) {
+		writeHeader();
+		tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+		tft.println("done");
+	} else {
+		tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+		tft.println("failed");
+	}
 
 	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	tft.print("init gps Serial1     ... ");
@@ -277,13 +292,33 @@ void setScreen(int screen) {
 }
 
 void logData() {
+	float flat, flon;
+	static const float LONDON_LAT = 52.361440, LONDON_LON = 5.239020;
 	if (has_sd) {
 		logNewRow();
+		flat = gps.location.lat();
+		flon = gps.location.lng();
+
+		logDateTime(gps);
+		logFloatData(flat, 5);
+		file.print("N,");
+		logFloatData(flon, 5);
+		file.print("E,");
+
+		logFloatData(gps.altitude.meters(), 2);
+		logFloatData(gps.course.deg(), 1);
+		float dist = (unsigned long) TinyGPSPlus::distanceBetween(
+				gps.location.lat(), gps.location.lng(), LONDON_LAT, LONDON_LON)
+				/ 1000;
+		logDistData(dist, 1);
+
 		logIntData (rpm);
 		logIntData (load);
 		logIntData (throttle);
 		logIntData (frp);
 		logIntData (maf);
+		float ratio = rpm / obdspeed;
+		logFloatData(ratio, 2);
 		logEndRow();
 		// Force data to SD and update the directory entry to avoid data loss.
 		if (!file.sync() || file.getWriteError())
@@ -314,7 +349,7 @@ void drawMetricScreen() {
 // Write data header.
 void writeHeader() {
 	file.print(
-			"INDEX,RCR,DATE,TIME,VALID,LATITUDE,N/S,LONGITUDE,E/W,HEIGHT,SPEED,HEADING,DISTANCE,RPM,ENGINELOAD,THROTTLE,FRP,MAF,");
+			"INDEX,RCR,DATE,TIME,VALID,LATITUDE,N/S,LONGITUDE,E/W,HEIGHT,SPEED,HEADING,DISTANCE,RPM,ENGINELOAD,THROTTLE,FRP,MAF,RATIO,");
 	file.println();
 }
 
@@ -351,11 +386,11 @@ static void drawMetricData(TinyGPSPlus &gps) {
 	flon = gps.location.lng();
 	age = gps.location.age();
 
-	logDateTime(gps);
-	logFloatData(flat, 5);
-	file.print("N,");
-	logFloatData(flon, 5);
-	file.print("E,");
+//	logDateTime(gps);
+//	logFloatData(flat, 5);
+//	file.print("N,");
+//	logFloatData(flon, 5);
+//	file.print("E,");
 
 	tft.setCursor(0, 0);
 	tft.setTextSize(2);
@@ -404,14 +439,14 @@ static void drawMetricData(TinyGPSPlus &gps) {
 	tft.print("Altitude   ");
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
 	print_float(gps.altitude.meters(), gps.altitude.isValid(), 8, 2);
-	logFloatData(gps.altitude.meters(), 2);
+//	logFloatData(gps.altitude.meters(), 2);
 
 	tft.setTextColor(ILI9341_WHITE);
 	tft.print("Angle:     ");
 	gpsangle = gps.course.deg();
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
 	print_float(gpsangle, gps.course.isValid(), 7, 2);
-	logFloatData(gpsangle, 1);
+//	logFloatData(gpsangle, 1);
 
 	tft.setTextColor(ILI9341_WHITE);
 	tft.print("Distance:  ");
@@ -420,7 +455,7 @@ static void drawMetricData(TinyGPSPlus &gps) {
 			/ 1000;
 	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
 	print_float(dist, gps.location.isValid(), 5, 2);
-	logDistData((float) dist, 1);
+//	logDistData((float) dist, 1);
 	tft.println();
 
 	drawSDCardFileMessage();
@@ -534,8 +569,12 @@ void process_serial() {
 	if (bts.available() > 0) {
 		incomingByte = bts.read();
 		if (incomingByte == '\n' || incomingByte == '\r') {
-			//Serial.println("foudn newline");
+#if defined(DEBUG)
+			Serial.println("found newline");
+#endif
+			execute();
 			clearbuf();
+			varcount = 0;
 		} else if (incomingByte == ' ') {
 			getcommand();
 			clearbuf();
@@ -543,15 +582,13 @@ void process_serial() {
 			storevar();
 			varcount++;
 			clearbuf();
+		} else if (incomingByte == '.') {
+			execute();
+			clearbuf();
+			varcount = 0;
 		} else {
-			if (incomingByte == '.') {
-				execute();
-				clearbuf();
-				varcount = 0;
-			} else {
-				buf[bc] = incomingByte;
-				bc++;
-			}
+			buf[bc] = incomingByte;
+			bc++;
 		}
 	}
 }
@@ -559,17 +596,20 @@ void process_serial() {
 //store the values in variable array
 void storevar() {
 	//  debug("var: ",buf);
-	//  Serial.print("var : ");
-	//  Serial.println(buf);
+#if defined(DEBUG)
+	Serial.print("var : ");
+	Serial.println(buf);
+#endif
 	int val = atoi(buf);
 	vars[varcount] = val;
 }
 
 //store command code 
 void getcommand() {
-	//Serial.print("command : ");
-	//Serial.println(buf);
-
+#if defined(DEBUG)
+	Serial.print("command : ");
+	Serial.println(buf);
+#endif
 	if (strcmp(buf, "m") == 0) {
 		command = mainscreen;
 	} else if (strcmp(buf, "s") == 0) {
@@ -579,8 +619,10 @@ void getcommand() {
 	} else if (strcmp(buf, "01") == 0) {
 		command = get;
 	} else {
-		//Serial.print("invalid command: ");
-		//Serial.println(buf);
+#if defined(DEBUG)
+		Serial.print("invalid command: ");
+		Serial.println(buf);
+#endif
 		command = -1;
 		bts.println("?");
 	}
@@ -614,6 +656,13 @@ void execute() {
 			bts.println(rpm);
 		break;
 	}
+
+	if (buf[0] == '0' && buf[1] == '1') {
+		int val = 0;
+		//obd.read(buf, val);
+		bts.println("m" + val);
+	}
+
 }
 
 void clearbuf() {
@@ -621,4 +670,17 @@ void clearbuf() {
 		buf[i] = 0;
 	}
 	bc = 0;
+}
+
+void resetSystem() {
+	tft.setTextSize(2);
+	tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+	tft.println("SYSTEM RESET!");
+	tft.setTextSize(1);
+	tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+
+	tft.println("reset file counter to 000");
+	tft.println();
+	
+	EEPROM.write(filenum_addr, 0);
 }

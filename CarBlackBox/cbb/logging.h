@@ -48,7 +48,7 @@ bool openFile(char *fileName) {
 		tft.print(fileName);
 		tft.print("     ... ");
 	}
-	if (!file.open(fileName, O_CREAT | O_WRITE | O_EXCL)) {
+	if (!file.open(fileName, O_CREAT | O_WRITE )) {
 		sprintf(fileName, "ERROR SD card");
 		tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
 		tft.println("failed");
