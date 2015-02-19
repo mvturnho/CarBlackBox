@@ -25,6 +25,7 @@
 #include <SdFat.h>
 #include <EEPROM.h>
 #include <math.h>
+#include <Time.h>  
 
 #include "graphics.h"
 #include "logging.h"
@@ -166,6 +167,9 @@ void loop(void) {
 		//}
 		feedgps();
 		switchScreen();
+		int touchReading = touchRead(23);
+		if (touchReading > 3000 )
+			button_state = true;
 	}
 	readRealTimeObd();
 	feedgps();
@@ -175,7 +179,25 @@ void loop(void) {
 	feedgps();
 }
 
+//------------------------------------------------------------------------------
+// call back for file timestamps
+void dateTime(uint16_t* date, uint16_t* time) {
+	// return date using FAT_DATE macro to format fields
+	*date = FAT_DATE(year(), month(), day());
+	// return time using FAT_TIME macro to format fields
+	*time = FAT_TIME(hour(), minute(), second());
+}
+
+time_t getTeensy3Time() {
+	return Teensy3Clock.get();
+}
+
 void initSystem() {
+	// set the Time library to use Teensy 3.0's RTC to keep time
+	setSyncProvider(getTeensy3Time);
+
+	SdFile::dateTimeCallback(dateTime);
+
 	has_sd = openFile(fileName);
 
 #if defined(DEBUG)
