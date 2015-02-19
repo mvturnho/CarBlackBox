@@ -9,13 +9,15 @@
 #define CBB_GRAPHICS_H_
 
 #define SPEED_POS 40
-#define RPM_POS 100
+#define RPM_POS 105
 #define LOAD_POS 160
 #define THR_POS  175
-#define INFO_POS 220
-#define ALIGN_Y 6
+#define INFO_POS 200
+#define BOTTOM_LINE 300
+#define ALIGN_Y 2
 #define ERROR_POS_X 120
-#define ERROR_POS_Y 310
+#define ERROR_POS_Y 300
+#define INIT_LOG_POS 150
 
 #define COLD  	10
 #define FROOZEN  20
@@ -37,7 +39,23 @@
 //For Satelites screen
 #define MAX_SATELLITES 40
 
-extern ILI9341_t3 tft;
+// Color definitions
+#define	BLACK   0x0000
+#define	BLUE    0x001F
+#define	DBLUE   0x000F
+#define	RED     0xF800
+#define	DRED    0xA900
+#define	DGREEN  0x0300
+#define	GREEN   0x07E0
+#define CYAN    0x07FF
+#define MAGENTA 0xF81F
+#define YELLOW  0xFFE0
+#define WHITE   0xFFFF
+#define BRIGHT_RED	0xf810
+#define GRAY1		0x8410
+#define GRAY2		0x4208
+
+extern TFT_ILI9340 tft;
 typedef struct satelite {
 	bool active;
 	int elevation;
@@ -123,23 +141,23 @@ static void print_float(float val, bool valid, int len, int prec) {
 }
 
 static void print_date(TinyGPSPlus &gps) {
-	TinyGPSDate d = gps.date;
-	TinyGPSTime t = gps.time;
-	if (!d.isValid()) {
-		tft.print("../../....");
-	} else {
+//	TinyGPSDate d = gps.date;
+//	TinyGPSTime t = gps.time;
+//	if (!d.isValid()) {
+//		tft.print("../../....");
+//	} else {
 		char sz[32];
-		sprintf(sz, "%02d/%02d/%02d", d.month(), d.day(), d.year());
+		sprintf(sz, "%02d/%02d/%02d",  day(), month(), year());
 		tft.print(sz);
-	}
+//	}
 	tft.print("  ");
-	if (!t.isValid()) {
-		tft.print("..:..:..");
-	} else {
-		char sz[32];
-		sprintf(sz, "%02d:%02d:%02d", t.hour(), t.minute(), t.second());
+//	if (!t.isValid()) {
+//		tft.print("..:..:..");
+//	} else {
+//		char sz[32];
+		sprintf(sz, "%02d:%02d:%02d", hour(), minute(), second());
 		tft.print(sz);
-	}
+//	}
 
 //	feedgps();
 }
@@ -157,29 +175,29 @@ void drawSourceIndicator(int xpos, int ypos, const char *str, int fg_color,
 		int bg_color) {
 	tft.setCursor(xpos, ypos);
 	tft.setTextColor(fg_color, bg_color);
-	tft.setTextSize(2);
+//	tft.setTextSize(2);
 	tft.print(str);
 }
 
 void drawSDCardFileMessage() {
-	tft.setTextSize(1);
+//	tft.setTextSize(1);
 	if (has_sd)
-		tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+		tft.setTextColor(WHITE, BLACK);
 	else {
 		if (blink)
-			tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+			tft.setTextColor(RED, BLACK);
 		else
-			tft.setTextColor(ILI9341_BLACK, ILI9341_BLACK);
+			tft.setTextColor(BLACK, BLACK);
 	}
-	tft.setCursor(0, ERROR_POS_Y);
+//	tft.setCursor(0, ERROR_POS_Y);
 	tft.print(fileName);
 }
 
 void drawDot(int i, int offset, int color) {
 	//first delete the old
-	tft.fillCircle(sats[i].old_x, sats[i].old_y, 3, ILI9341_BLACK);
-	tft.setTextColor(ILI9341_BLACK);
-	tft.setTextSize(1);
+	tft.fillCircle(sats[i].old_x, sats[i].old_y, 3, BLACK);
+	tft.setTextColor(BLACK);
+//	tft.setTextSize(1);
 	tft.setCursor(sats[i].old_x, sats[i].old_y + 4);
 	tft.print(i + 1);
 	//draw the new
@@ -188,7 +206,7 @@ void drawDot(int i, int offset, int color) {
 	int x = fact * cos(radians(sats[i].azimuth + offset));
 	tft.fillCircle(CENTER_X + x, CENTER_Y + y, 2, color);
 	tft.setTextColor(color);
-	tft.setTextSize(1);
+//	tft.setTextSize(1);
 	tft.setCursor(CENTER_X + x, CENTER_Y + y + 4);
 	tft.print(i + 1);
 	sats[i].old_x = CENTER_X + x;
@@ -211,14 +229,14 @@ void drawBar(int i, int color) {
 	if (sats[i].snr > 0) {
 		int y = i * 8;
 		int w = sats[i].snr * FACTOR;
-		if (color == ILI9341_BLACK) {
-			tft.fillRect(STARTX, y, MAXBAR, BARHEIGHT, ILI9341_BLACK);
+		if (color == BLACK) {
+			tft.fillRect(STARTX, y, MAXBAR, BARHEIGHT, BLACK);
 		} else {
 			tft.fillRect(STARTX, y, w, BARHEIGHT, color);
 			tft.fillRect(STARTX + w, y, BARLENGTH - w, BARHEIGHT,
-					ILI9341_BLACK);
+					BLACK);
 
-			tft.setTextColor(ILI9341_WHITE);
+			tft.setTextColor(WHITE);
 			tft.setCursor(MAXBAR - 14, y);
 			tft.setTextSize(1);
 			tft.print(i + 1);
@@ -229,19 +247,19 @@ void drawBar(int i, int color) {
 void drawPercentBar(int value, int y, int color, const char *label) {
 	int lx = 2.4 * value;
 	tft.fillRect(0, y, lx, 10, color);
-	tft.fillRect(lx, y, 240 - lx, 10, ILI9341_BLACK);
-	tft.setCursor(2, y + 1);
-	tft.setTextSize(1);
-	tft.setTextColor(ILI9341_WHITE);
-	tft.print(label);
-	tft.setCursor(40, y + 1);
-	print_fixint(value, -1, 6);
+	tft.fillRect(lx, y, 240 - lx, 10, BLACK);
+//	tft.setCursor(2, y + 1);
+//	tft.setTextSize(1);
+//	tft.setTextColor(WHITE);
+//	tft.print(label);
+//	tft.setCursor(40, y + 1);
+//	print_fixint(value, -1, 6);
 //	feedgps();
 }
 
 void drawRealTimeData() {
-	drawPercentBar(load, LOAD_POS, ILI9341_DGREEN, "load:");
-	drawPercentBar(throttle, THR_POS, ILI9341_YELLOW, "throttle:");
+	drawPercentBar(load, LOAD_POS, DGREEN, "load:");
+	drawPercentBar(throttle, THR_POS, YELLOW, "throttle:");
 }
 
 void rotatePoint(float a, int *x, int *y, int xm, int ym) {
@@ -255,9 +273,9 @@ void rotatePoint(float a, int *x, int *y, int xm, int ym) {
 }
 
 void drawSatScreen() {
-	tft.fillScreen(ILI9341_BLACK);
-	tft.setCursor(0, 260);
-	tft.fillRoundRect(0, 280, STARTX - 10, 40, 10, ILI9341_DRED);
+	tft.fillScreen(BLACK);
+//	tft.setCursor(0, 260);
+	tft.fillRoundRect(0, 260, STARTX - 10, 60, 10, DRED);
 }
 
 #endif /* CBB_GRAPHICS_H_ */
