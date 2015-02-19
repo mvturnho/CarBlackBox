@@ -27,34 +27,33 @@ bool openFile(char *fileName) {
 	else
 		fnum++;
 	sprintf(fileName, "%03d-CBB.CSV", fnum);
-	tft.setTextColor(WHITE, BLACK);
-	tft.print("init SD card");
-	tft.setCursor(INIT_LOG_POS,tft.cursor_y);
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	tft.print("init SD card         ... ");
 
 	// breadboards.  use SPI_FULL_SPEED for better performance.
 	if (!sd.begin(SD_CS, SPI_HALF_SPEED)) {
 //sd.initErrorHalt();
-		tft.setTextColor(RED, BLACK);
+		tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
 		tft.println("failed");
 		sprintf(fileName, "No SD card");
 		return false;
 	}
-	tft.setTextColor(GREEN, BLACK);
+	tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
 	tft.println(fileName);
-	tft.setTextColor(WHITE, BLACK);
+	tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
 	if (sd.exists(fileName)) {
-		tft.print("overwrite file");
+		tft.print("overwrite file       ... ");
 	} else {
 		tft.print("open ");
 		tft.print(fileName);
+		tft.print("     ... ");
 	}
-	tft.setCursor(INIT_LOG_POS,tft.cursor_y);
 	if (!file.open(fileName, O_CREAT | O_WRITE )) {
 		sprintf(fileName, "ERROR SD card");
-		tft.setTextColor(RED, BLACK);
+		tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
 		tft.println("failed");
 	} else {
-		tft.setTextColor(GREEN, BLACK);
+		tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
 		tft.println("done");
 	}
 	EEPROM.write(filenum_addr, fnum);

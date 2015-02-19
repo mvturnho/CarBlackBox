@@ -29,15 +29,15 @@ boolean startOBD() {
 	while (retry < 3) {
 		if (!obd_connected)
 			obd_connected = obd.init();
-//		tft.print(".");
+		tft.print(".");
 		retry++;
 	}
 	if (obd_connected) {
-		tft.setTextColor(GREEN, BLACK);
+		tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
 		tft.printf(" %s\n", obd.getVersion());
 		return true;
 	} else {
-		tft.setTextColor(RED, BLACK);
+		tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
 		tft.println(" disabled");
 		return false;
 	}
